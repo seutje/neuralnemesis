@@ -55,7 +55,7 @@ neural-nemesis/
 
 * **Virtual Env:** Always check for `venv`. If missing: `python3 -m venv venv`.
 * **Activation:** `source venv/bin/activate`.
-* **Execution:** When running training scripts, ensure you log TensorBoard metrics to `./logs`.
+* **Execution:** When running training scripts, ensure you log TensorBoard metrics to `./logs`. Don't run long running training scripts yourself, instruct the user to run them. Only use short testing runs during development.
 * **Export:** When converting models for TFJS, use a dedicated output folder `frontend_web/public/assets/model/`.
 
 ### 3.2 Web Development (Phase 2-5)
