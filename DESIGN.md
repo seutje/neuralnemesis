@@ -1,109 +1,98 @@
 # Design Document: Neural Nemesis
-
 ## Browser-Based Adaptive Fighting Game AI
 
 ### 1. Project Overview
-
 **Title:** Neural Nemesis
-**Objective:** To build a 3D (but fixed to a 2D plane with side-view) web-based 1v1 fighting game where the CPU opponent is driven by a Deep Reinforcement Learning (DRL) agent. The agent is pre-trained offline for high-level competence and fine-tuned online (in the browser) to adapt to specific player strategies in real-time, creating a "Nemesis" that learns the player's habits.
+**Objective:** To build a web-based 1v1 fighting game where the CPU opponent is driven by a Deep Reinforcement Learning (DRL) agent. The agent is pre-trained offline for high-level competence and fine-tuned online (in the browser) to adapt to specific player strategies in real-time, creating a "Nemesis" that learns the player's habits.
 
 ### 2. System Architecture
 
 The system is divided into two distinct pipelines: **Offline Training (Python)** and **Online Inference/Adaptation (JavaScript/Web Workers)**.
 
 #### A. High-Level Data Flow
-
-1. **Gym Environment (Python):** Simulates the game logic at high speed for initial training (millions of steps).
-2. **Base Model Export:** The trained Policy Network is converted to a `tfjs_graph_model`.
-3. **Browser Game Loop (Main Thread):** Handles rendering, input capture, and rigid body physics (60 FPS).
-4. **AI Manager (Web Worker):**
-* Receives Game State () from Main Thread.
-* Outputs Action () back to Main Thread.
-* Accumulates an "Experience Replay" buffer locally.
-* Performs background SGD (Stochastic Gradient Descent) to update weights without blocking the UI.
-
-
+1.  **Gym Environment (Python):** Simulates the game logic at high speed for initial training (millions of steps).
+2.  **Base Model Export:** The trained Policy Network is converted to a `tfjs_graph_model`.
+3.  **Browser Game Loop (Main Thread):** Handles rendering, input capture, and rigid body physics (60 FPS).
+4.  **AI Manager (Web Worker):**
+    * Receives Game State ($S_t$) from Main Thread.
+    * Outputs Action ($A_t$) back to Main Thread.
+    * Accumulates an "Experience Replay" buffer locally.
+    * Performs background SGD (Stochastic Gradient Descent) to update weights without blocking the UI.
 
 ### 3. Reinforcement Learning Formulation (MDP)
 
-We define the game as a Markov Decision Process (MDP) defined by the tuple .
+We define the game as a Markov Decision Process (MDP) defined by the tuple $(S, A, R, \gamma)$.
 
-#### 3.1 State Space ()
-
+#### 3.1 State Space ($S$)
 The input to the neural network. To ensure fast inference in the browser, we use a compact vector rather than raw pixels.
 
-Let  where .
+Let $S_t \in \mathbb{R}^{n}$ where $n \approx 20-30$.
+$$
+S_t = [ \Delta x, \Delta y, h_{self}, h_{opp}, v_{self\_x}, v_{self\_y}, \dots, \text{action\_flags} ]
+$$
 
-* : Relative distance between players (normalized to ).
-* : Health percentages.
-* : Velocities (essential for detecting jump arcs).
-* : One-hot encoded state of the opponent (e.g., `is_stunned`, `is_attacking`, `is_blocking`).
-* **Frame Stacking:** Concatenate the last  frames to allow the AI to perceive momentum and reaction speed.
+* $\Delta x, \Delta y$: Relative distance between players (normalized to $[0, 1]$).
+* $h_{self}, h_{opp}$: Health percentages.
+* $v_{x}, v_{y}$: Velocities (essential for detecting jump arcs).
+* $\text{action\_flags}$: One-hot encoded state of the opponent (e.g., `is_stunned`, `is_attacking`, `is_blocking`).
+* **Frame Stacking:** Concatenate the last $k=4$ frames to allow the AI to perceive momentum and reaction speed.
 
-#### 3.2 Action Space ()
-
+#### 3.2 Action Space ($A$)
 We use a **Discrete Action Space** corresponding to valid controller inputs.
+
+A = \{ \text{Idle, Left, Right, Jump, Crouch, Block, Light_Attack, Heavy_Attack, Special} \}
 
 * *Note:* Complex combos (e.g., Down-Forward-Punch) are abstracted into single macro-actions for the AI to ensure faster convergence.
 
-#### 3.3 Reward Function ()
-
+#### 3.3 Reward Function ($R$)
 The shaping of the reward function is critical for "fighting" behavior.
 
-Where:
+$$R_t = \alpha \cdot (h_{opp, t-1} - h_{opp, t}) - \beta \cdot (h_{self, t-1} - h_{self, t}) + \delta \cdot \mathbb{I}_{win}$$
 
-* : Reward for dealing damage.
-* : Penalty for taking damage (higher than  to encourage defense/blocking).
-* : Bonus for winning the round ( is 1 if win, else 0).
+Where:
+* $\alpha = 1.0$: Reward for dealing damage.
+* $\beta = 1.5$: Penalty for taking damage (higher than $\alpha$ to encourage defense/blocking).
+* $\delta = 10.0$: Bonus for winning the round ($\mathbb{I}_{win}$ is 1 if win, else 0).
 * *Spacing Penalty:* Small negative reward for being trapped in corners.
 
 ### 4. Model Architecture & Algorithms
 
 #### 4.1 Algorithm Selection: PPO (Proximal Policy Optimization)
-
 We use PPO for both offline and online phases. It is sample-efficient and stable, preventing "catastrophic forgetting" during the online fine-tuning phase where batch sizes are small.
 
 **Objective Function:**
-
-
-* : Advantage estimate (how much better was this action than average?).
-* : Probability ratio .
-* : Clipping parameter (usually 0.2) to prevent wild weight updates.
+$$L(\theta) = \hat{\mathbb{E}}_t \left[ \min(r_t(\theta)\hat{A}_t, \text{clip}(r_t(\theta), 1-\epsilon, 1+\epsilon)\hat{A}_t) \right]$$
+* $\hat{A}_t$: Advantage estimate (how much better was this action than average?).
+* $r_t(\theta)$: Probability ratio $\frac{\pi_\theta(a_t|s_t)}{\pi_{\theta_{old}}(a_t|s_t)}$.
+* $\epsilon$: Clipping parameter (usually 0.2) to prevent wild weight updates.
 
 #### 4.2 Network Topology
-
 A shared backbone with two heads (Actor-Critic).
 
 * **Input Layer:** shape `(k_frames * state_features)`
 * **Hidden Layers (Backbone):**
-* Dense (128 units, ReLU)
-* Dense (64 units, ReLU)  *These layers are frozen during online play.*
-
-
+    * Dense (128 units, ReLU)
+    * Dense (64 units, ReLU) $\rightarrow$ *These layers are frozen during online play.*
 * **Heads:**
-* **Actor (Policy):** Dense (Action_Size, Softmax)  Outputs probabilities.
-* **Critic (Value):** Dense (1, Linear)  Estimates win probability.
-
-
+    * **Actor (Policy):** Dense (Action_Size, Softmax) $\rightarrow$ Outputs probabilities.
+    * **Critic (Value):** Dense (1, Linear) $\rightarrow$ Estimates win probability.
 
 ### 5. Offline Pre-Training Strategy
 
 Before shipping, train base models to serve as "Personality Archetypes."
 
-1. **The Spammer:** Reward heavily for attack frequency, discount defense.
-2. **The Turtle:** High penalty for taking damage, high reward for successful blocks.
-3. **The Pro:** Balanced rewards, trained via **Self-Play** (Agent vs. Agent).
+1.  **The Spammer:** Reward heavily for attack frequency, discount defense.
+2.  **The Turtle:** High penalty for taking damage, high reward for successful blocks.
+3.  **The Pro:** Balanced rewards, trained via **Self-Play** (Agent vs. Agent).
 
 **Method:**
 Use `Stable-Baselines3` in Python.
-
 ```python
 model = PPO("MlpPolicy", env, verbose=1)
 model.learn(total_timesteps=1_000_000)
 model.save("neural_nemesis_pro")
 # Convert to TFJS
 tensorflowjs_converter --input_format=tf_saved_model ...
-
 ```
 
 ### 6. Online Real-Time Fine-Tuning
