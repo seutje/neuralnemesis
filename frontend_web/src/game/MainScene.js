@@ -287,23 +287,27 @@ export default class MainScene extends Phaser.Scene {
     }
 
     captureGameState() {
-        const dx = (this.opponent.x - this.player.x) / this.WIDTH;
-        const dy = (this.opponent.y - this.player.y) / this.HEIGHT;
+        // Mapping AI (this.opponent) to "Self" (p1) 
+        // and Human (this.player) to "Opponent" (p2)
+        // to match the Python model's perspective.
+        
+        const dx = (this.player.x - this.opponent.x) / this.WIDTH;
+        const dy = (this.player.y - this.opponent.y) / this.HEIGHT;
         
         return [
             dx, dy,
-            this.gameState.p1_health / 100,
-            this.gameState.p2_health / 100,
-            this.player.body.velocity.x / 300,
-            this.player.body.velocity.y / 500,
-            this.opponent.body.velocity.x / 300,
+            this.gameState.p2_health / 100, // Self Health (AI)
+            this.gameState.p1_health / 100, // Opponent Health (Human)
+            this.opponent.body.velocity.x / 300, // Self Vel (AI)
             this.opponent.body.velocity.y / 500,
-            this.gameState.p1_stun > 0 ? 1 : 0,
-            this.gameState.p1_attacking > 0 ? 1 : 0,
-            this.gameState.p1_blocking ? 1 : 0,
-            this.gameState.p2_stun > 0 ? 1 : 0,
+            this.player.body.velocity.x / 300,   // Opponent Vel (Human)
+            this.player.body.velocity.y / 500,
+            this.gameState.p2_stun > 0 ? 1 : 0,  // Self Flags
             this.gameState.p2_attacking > 0 ? 1 : 0,
-            this.gameState.p2_blocking ? 1 : 0
+            this.gameState.p2_blocking ? 1 : 0,
+            this.gameState.p1_stun > 0 ? 1 : 0,  // Opponent Flags
+            this.gameState.p1_attacking > 0 ? 1 : 0,
+            this.gameState.p1_blocking ? 1 : 0
         ];
     }
 }
