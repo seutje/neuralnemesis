@@ -1,5 +1,10 @@
-stable-baselines3[extra]
 gymnasium
-tensorflowjs
-tensorboard
+stable-baselines3[extra]
 shimmy>=2.0
+numpy
+tensorflowjs
+onnx
+tf2onnx
+tensorboard
+onnx2tf
+snot
