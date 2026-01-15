@@ -1,0 +1,5 @@
+stable-baselines3[extra]
+gymnasium
+tensorflowjs
+tensorboard
+shimmy>=2.0
