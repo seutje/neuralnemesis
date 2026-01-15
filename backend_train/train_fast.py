@@ -1,4 +1,4 @@
-import gymnasium as gym
+import torch as th
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import SubprocVecEnv, VecFrameStack, VecNormalize
 from stable_baselines3.common.monitor import Monitor
@@ -29,15 +29,18 @@ def train():
     # Add normalization for observations and rewards
     env = VecNormalize(env, norm_obs=True, norm_reward=True, clip_obs=10.)
     
-    # 3. Setup PPO
+    # 3. Setup PPO with ReLU for better TFJS compatibility
+    policy_kwargs = dict(activation_fn=th.nn.ReLU)
+    
     model = PPO(
         "MlpPolicy",
         env,
+        policy_kwargs=policy_kwargs,
         device="cpu", 
         verbose=1,
         tensorboard_log="./logs/ppo_fighting_fast/",
         learning_rate=3e-4,
-        n_steps=1024,       # Increased n_steps for better gradient estimation
+        n_steps=1024,
         batch_size=256,
         n_epochs=10,
         gamma=0.99,

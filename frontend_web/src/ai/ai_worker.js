@@ -36,11 +36,8 @@ let replayBuffer = new ReplayBuffer();
 
 async function init() {
     console.log("AI Worker: Initializing TFJS...");
-    try {
-        await tf.setBackend('webgl');
-    } catch (e) {
-        await tf.setBackend('cpu');
-    }
+    // Force CPU backend for compatibility and performance on small models
+    await tf.setBackend('cpu');
     console.log("AI Worker: TFJS Backend:", tf.getBackend());
     optimizer = tf.train.adam(3e-4);
 }
