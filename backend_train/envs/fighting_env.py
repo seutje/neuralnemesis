@@ -46,8 +46,8 @@ class FightingGameEnv(gym.Env):
         self.p2_action_timer = 0
         self.p2_current_action = 0
         
-        # Player 1 (AI)
-        self.p1_x = 200
+        # Player 1 (AI) - Now starts on the RIGHT
+        self.p1_x = 600
         self.p1_y = self.GROUND_Y - self.PLAYER_HEIGHT
         self.p1_vx = 0
         self.p1_vy = 0
@@ -56,8 +56,8 @@ class FightingGameEnv(gym.Env):
         self.p1_attacking = 0
         self.p1_blocking = False
         
-        # Player 2 (Opponent - Random Bot for now)
-        self.p2_x = 600
+        # Player 2 (Opponent) - Now starts on the LEFT
+        self.p2_x = 200
         self.p2_y = self.GROUND_Y - self.PLAYER_HEIGHT
         self.p2_vx = 0
         self.p2_vy = 0
