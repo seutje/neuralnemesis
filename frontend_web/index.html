@@ -33,9 +33,14 @@
 <body>
     <div id="game-container"></div>
     <div id="ui-overlay">
-        <h1>Neural Nemesis</h1>
+        <h1 style="margin: 0; color: #0ff; text-transform: uppercase; letter-spacing: 2px;">Neural Nemesis</h1>
         <div id="ai-stats">
-            <p>AI Status: <span id="ai-status">Loading...</span></p>
+            <p>AI Status: <span id="ai-status" style="color: #f0f;">Connecting...</span></p>
+        </div>
+        <div id="instructions" style="background: rgba(0,0,0,0.5); padding: 10px; border-radius: 5px; font-size: 12px;">
+            <p><strong>WASD / Arrows:</strong> Move & Jump</p>
+            <p><strong>S / Down:</strong> Block</p>
+            <p><strong>J:</strong> Light Attack</p>
         </div>
     </div>
     <script type="module" src="/src/main.js"></script>
