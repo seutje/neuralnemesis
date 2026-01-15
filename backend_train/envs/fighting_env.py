@@ -29,15 +29,22 @@ class FightingGameEnv(gym.Env):
         self.GRAVITY = 0.8
         
         self.MAX_HEALTH = 100
+        self.MAX_STEPS = 2000 # 2000 frames is about 33 seconds at 60fps
         
         # Frame data (simplified)
         self.ATTACK_DURATION = 20
         self.STUN_DURATION = 30
+        self.ATTACK_REACH = 90 # Increased reach to ensure hits land from a distance
         
         self.reset()
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
+        self.current_step = 0
+        
+        # Opponent (P2) Action Persistence
+        self.p2_action_timer = 0
+        self.p2_current_action = 0
         
         # Player 1 (AI)
         self.p1_x = 200
@@ -86,9 +93,23 @@ class FightingGameEnv(gym.Env):
         # 1. Handle P1 (AI) Input
         self._apply_action(1, action)
         
-        # 2. Handle P2 (Opponent - Simple Random Bot for training)
-        p2_action = self.action_space.sample()
-        self._apply_action(2, p2_action)
+        # 2. Handle P2 (Opponent - Aggressive Random Bot)
+        if self.p2_action_timer <= 0:
+            # 70% chance to move towards P1, 30% chance for random action
+            if self.np_random.random() < 0.7:
+                if self.p2_x > self.p1_x + self.PLAYER_WIDTH + 20:
+                    self.p2_current_action = 1 # Left
+                elif self.p2_x < self.p1_x - self.PLAYER_WIDTH - 20:
+                    self.p2_current_action = 2 # Right
+                else:
+                    self.p2_current_action = self.np_random.choice([5, 6, 7, 8]) # Block or Attack
+            else:
+                self.p2_current_action = self.action_space.sample()
+            self.p2_action_timer = 15
+        else:
+            self.p2_action_timer -= 1
+            
+        self._apply_action(2, self.p2_current_action)
         
         # 3. Apply Physics
         self._apply_physics(1)
@@ -98,15 +119,16 @@ class FightingGameEnv(gym.Env):
         reward = self._resolve_combat()
         
         # 5. Check Termination
+        self.current_step += 1
         terminated = False
         if self.p1_health <= 0 or self.p2_health <= 0:
             terminated = True
             if self.p2_health <= 0: # P1 wins
-                reward += 10.0
+                reward += 100.0 # Massive win bonus
             elif self.p1_health <= 0: # P1 loses
-                reward -= 5.0 # Extra penalty for losing
+                reward -= 50.0 # Significant loss penalty
         
-        truncated = False
+        truncated = self.current_step >= self.MAX_STEPS
         
         return self._get_obs(), reward, terminated, truncated, {}
 
@@ -198,36 +220,52 @@ class FightingGameEnv(gym.Env):
         h_self_prev = self.p1_health
         
         # Simple hitbox check
-        p1_rect = (self.p1_x, self.p1_y, self.PLAYER_WIDTH, self.PLAYER_HEIGHT)
-        p2_rect = (self.p2_x, self.p2_y, self.PLAYER_WIDTH, self.PLAYER_HEIGHT)
+        p1_rect = [self.p1_x, self.p1_y, self.PLAYER_WIDTH, self.PLAYER_HEIGHT]
+        p2_rect = [self.p2_x, self.p2_y, self.PLAYER_WIDTH, self.PLAYER_HEIGHT]
         
+        # Extend hitboxes based on reach if attacking
+        p1_attack_rect = p1_rect.copy()
+        if self.p1_attacking > 0:
+            if self.p1_x < self.p2_x: # Facing right
+                p1_attack_rect[2] += self.ATTACK_REACH
+            else: # Facing left
+                p1_attack_rect[0] -= self.ATTACK_REACH
+                p1_attack_rect[2] += self.ATTACK_REACH
+
+        p2_attack_rect = p2_rect.copy()
+        if self.p2_attacking > 0:
+            if self.p2_x < self.p1_x: # Facing right
+                p2_attack_rect[2] += self.ATTACK_REACH
+            else: # Facing left
+                p2_attack_rect[0] -= self.ATTACK_REACH
+                p2_attack_rect[2] += self.ATTACK_REACH
+
         def check_collision(r1, r2):
             return r1[0] < r2[0] + r2[2] and r1[0] + r1[2] > r2[0] and \
                    r1[1] < r2[1] + r2[3] and r1[1] + r1[3] > r2[1]
 
         # P1 Attacks P2
-        if self.p1_attacking > 0 and check_collision(p1_rect, p2_rect):
+        if self.p1_attacking > 0 and check_collision(p1_attack_rect, p2_rect):
             if not self.p2_blocking:
-                damage = 1
+                damage = 2
                 self.p2_health -= damage
                 self.p2_stun = self.STUN_DURATION
-                # Only reward once per attack frame or if damage dealt?
-                # For simplicity, reward for damage dealt
-            else:
-                pass # Blocked
+                self.p2_attacking = 0 # INTERRUPT: P2 stops attacking if hit
                 
         # P2 Attacks P1
-        if self.p2_attacking > 0 and check_collision(p1_rect, p2_rect):
+        if self.p2_attacking > 0 and check_collision(p2_attack_rect, p1_rect):
             if not self.p1_blocking:
-                damage = 1
+                damage = 2
                 self.p1_health -= damage
                 self.p1_stun = self.STUN_DURATION
-            else:
-                pass # Blocked
+                self.p1_attacking = 0 # INTERRUPT: P1 stops attacking if hit
 
-        # Reward Function from DESIGN.md:
-        # R = 1.0 * (h_opp_prev - h_opp) - 1.5 * (h_self_prev - h_self)
-        reward += 1.0 * (h_opp_prev - self.p2_health)
-        reward -= 1.5 * (h_self_prev - self.p1_health)
+        # Reward Function - Recalibrated for Aggression
+        reward += 10.0 * (h_opp_prev - self.p2_health)
+        reward -= 10.0 * (h_self_prev - self.p1_health)
+        
+        # Approach Incentive: moderate to guide towards combat
+        dist = abs(self.p1_x - self.p2_x) / self.WIDTH
+        reward += 0.005 * (1.0 - dist)
         
         return reward

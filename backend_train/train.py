@@ -2,20 +2,26 @@ import gymnasium as gym
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import DummyVecEnv, VecFrameStack
 from stable_baselines3.common.evaluation import evaluate_policy
+from stable_baselines3.common.monitor import Monitor
+from stable_baselines3.common.callbacks import CheckpointCallback
+from gymnasium.wrappers import TimeLimit
 from envs.fighting_env import FightingGameEnv
 import os
 
 def train():
     # Create environment
     def make_env():
-        return FightingGameEnv()
+        env = FightingGameEnv()
+        # Ensure a hard limit at the wrapper level too
+        env = TimeLimit(env, max_episode_steps=2000)
+        env = Monitor(env)
+        return env
     
     env = DummyVecEnv([make_env])
     # Frame stacking as per DESIGN.md Section 3.1
     env = VecFrameStack(env, n_stack=4)
     
     # Setup PPO as per DESIGN.md Section 4
-    # Note: We use MlpPolicy which is compatible with VecFrameStack (it flattens the input)
     model = PPO(
         "MlpPolicy",
         env,
@@ -30,14 +36,21 @@ def train():
         clip_range=0.2,
     )
     
-    # Train for 200k timesteps (enough for a good demo against random bot)
-    print("Starting training for 200,000 timesteps...")
-    model.learn(total_timesteps=200_000)
+    # Setup Checkpoint Callback
+    checkpoint_callback = CheckpointCallback(
+        save_freq=100_000,
+        save_path="./models/",
+        name_prefix="ppo_fighting_checkpoint"
+    )
     
-    # Save the model
-    os.makedirs("backend_train/models", exist_ok=True)
-    model.save("backend_train/models/neural_nemesis_pro")
-    print("Model saved to backend_train/models/neural_nemesis_pro.zip")
+    # Train for 1M timesteps as per PLAN.md
+    print("Starting training for 1,000,000 timesteps...")
+    model.learn(total_timesteps=1_000_000, callback=checkpoint_callback)
+    
+    # Save the final model
+    os.makedirs("models", exist_ok=True)
+    model.save("models/neural_nemesis_pro")
+    print("Model saved to models/neural_nemesis_pro.zip")
     
     # Verification: Evaluate against random bot
     print("Evaluating model...")
