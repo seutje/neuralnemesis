@@ -36,8 +36,16 @@
         <h1 style="margin: 0; color: #0ff; text-transform: uppercase; letter-spacing: 2px;">Neural Nemesis</h1>
         <div id="ai-stats">
             <p>AI Status: <span id="ai-status" style="color: #f0f;">Connecting...</span></p>
+            <div style="pointer-events: auto; margin-top: 10px;">
+                <label for="difficulty">Difficulty:</label>
+                <select id="difficulty" style="background: #222; color: #fff; border: 1px solid #0ff; padding: 5px;">
+                    <option value="easy">Easy (Random)</option>
+                    <option value="medium">Medium (Uncertain)</option>
+                    <option value="hard" selected>Hard (Optimal)</option>
+                </select>
+            </div>
         </div>
-        <div id="instructions" style="background: rgba(0,0,0,0.5); padding: 10px; border-radius: 5px; font-size: 12px;">
+        <div id="instructions" style="background: rgba(0,0,0,0.5); padding: 10px; border-radius: 5px; font-size: 12px; margin-top: 20px;">
             <p><strong>WASD / Arrows:</strong> Move & Jump</p>
             <p><strong>S / Down:</strong> Block</p>
             <p><strong>J:</strong> Light Attack</p>

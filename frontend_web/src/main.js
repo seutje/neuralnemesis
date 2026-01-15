@@ -17,3 +17,10 @@ const config = {
 };
 
 const game = new Phaser.Game(config);
+
+document.getElementById('difficulty').addEventListener('change', (e) => {
+    const scene = game.scene.getScene('MainScene');
+    if (scene && scene.aiWorker) {
+        scene.aiWorker.postMessage({ type: 'set_difficulty', payload: e.target.value });
+    }
+});

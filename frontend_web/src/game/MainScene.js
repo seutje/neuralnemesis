@@ -22,6 +22,11 @@ export default class MainScene extends Phaser.Scene {
         this.GROUND_Y = 500;
         this.isAiReady = false;
         this.waitingForPrediction = false;
+        this.roundEnded = false;
+        
+        // Humanizing AI: Action Queue
+        this.aiActionQueue = [];
+        this.REACTION_DELAY_FRAMES = 10; // ~160ms at 60fps
     }
 
     preload() {
@@ -62,10 +67,20 @@ export default class MainScene extends Phaser.Scene {
         
         // AI Debug UI
         this.debugContainer = this.add.container(20, 100);
-        const bg = this.add.rectangle(0, 0, 180, 100, 0x000000, 0.7).setOrigin(0);
+        const bg = this.add.rectangle(0, 0, 200, 240, 0x000000, 0.7).setOrigin(0);
         this.confidenceText = this.add.text(10, 10, 'AI Confidence: ---', { fontSize: '14px', fill: '#0ff' });
-        this.intentText = this.add.text(10, 35, 'Intent: ---', { fontSize: '14px', fill: '#f0f' });
-        this.bufferText = this.add.text(10, 60, 'Memories: 0', { fontSize: '14px', fill: '#ff0' });
+        this.intentText = this.add.text(10, 30, 'Intent: ---', { fontSize: '14px', fill: '#f0f' });
+        this.bufferText = this.add.text(10, 50, 'Memories: 0', { fontSize: '14px', fill: '#ff0' });
+        
+        // Probability bars
+        this.probBars = [];
+        const actions = ['Idle', 'Left', 'Right', 'Jump', 'Crouch', 'Block', 'Light', 'Heavy', 'Spec'];
+        for (let i = 0; i < 9; i++) {
+            const label = this.add.text(10, 75 + i * 18, actions[i], { fontSize: '10px', fill: '#aaa' });
+            const bar = this.add.rectangle(50, 80 + i * 18, 0, 10, 0x00ff00).setOrigin(0, 0.5);
+            this.probBars.push(bar);
+            this.debugContainer.add([label, bar]);
+        }
         
         this.debugContainer.add([bg, this.confidenceText, this.intentText, this.bufferText]);
     }
@@ -92,7 +107,7 @@ export default class MainScene extends Phaser.Scene {
         this.aiWorker = new Worker(new URL('../ai/ai_worker.js', import.meta.url), { type: 'module' });
         this.aiWorker.postMessage({ type: 'init' });
         this.aiWorker.onmessage = (e) => {
-            const { type, payload, confidence, bufferSize } = e.data;
+            const { type, payload, confidence, bufferSize, probs } = e.data;
             
             if (type === 'ready') {
                 console.log("MainThread: AI Worker is READY");
@@ -102,13 +117,14 @@ export default class MainScene extends Phaser.Scene {
             }
             
             if (type === 'action') {
-                this.executeAIAction(payload);
+                // Instead of executing immediately, push to queue
+                this.aiActionQueue.push({
+                    action: payload,
+                    confidence: confidence,
+                    probs: probs,
+                    time: this.time.now
+                });
                 this.waitingForPrediction = false;
-                
-                // Update Debug UI
-                this.confidenceText.setText(`AI Confidence: ${(confidence).toFixed(2)}`);
-                const actions = ['Idle', 'Left', 'Right', 'Jump', 'Crouch', 'Block', 'Light', 'Heavy', 'Special'];
-                this.intentText.setText(`Intent: ${actions[payload]}`);
             }
 
             if (type === 'stats') {
@@ -188,10 +204,40 @@ export default class MainScene extends Phaser.Scene {
 
     update() {
         if (this.gameState.p1_health <= 0 || this.gameState.p2_health <= 0) {
-            this.statusText.setText(this.gameState.p1_health <= 0 ? 'AI WINS' : 'PLAYER WINS');
+            if (!this.roundEnded) {
+                this.roundEnded = true;
+                this.statusText.setText(this.gameState.p1_health <= 0 ? 'AI WINS' : 'PLAYER WINS');
+                
+                // Trigger Training at end of round
+                console.log("MainThread: Round ended. Triggering AI Training...");
+                this.aiWorker.postMessage({ type: 'train' });
+                
+                // Reset round after a delay
+                this.time.delayedCall(3000, () => {
+                    this.resetRound();
+                });
+            }
             this.player.body.setVelocityX(0);
             this.opponent.body.setVelocityX(0);
             return;
+        }
+
+        // Handle AI Action Queue (Reaction Delay)
+        if (this.aiActionQueue.length > this.REACTION_DELAY_FRAMES) {
+            const next = this.aiActionQueue.shift();
+            this.executeAIAction(next.action);
+            
+            // Update Debug UI
+            this.confidenceText.setText(`AI Confidence: ${(next.confidence).toFixed(2)}`);
+            const actions = ['Idle', 'Left', 'Right', 'Jump', 'Crouch', 'Block', 'Light', 'Heavy', 'Spec'];
+            this.intentText.setText(`Intent: ${actions[next.action]}`);
+            
+            // Update probability bars
+            if (next.probs) {
+                next.probs.forEach((p, i) => {
+                    this.probBars[i].width = p * 120; // 120px max width
+                });
+            }
         }
 
         const prevState = this.captureGameState();
@@ -279,6 +325,27 @@ export default class MainScene extends Phaser.Scene {
         }
 
         this.updateHealthBars();
+    }
+
+    resetRound() {
+        this.gameState.p1_health = 100;
+        this.gameState.p2_health = 100;
+        this.gameState.p1_stun = 0;
+        this.gameState.p2_stun = 0;
+        this.gameState.p1_attacking = 0;
+        this.gameState.p2_attacking = 0;
+        this.gameState.p1_blocking = false;
+        this.gameState.p2_blocking = false;
+        
+        this.player.setPosition(200, 450);
+        this.opponent.setPosition(600, 450);
+        this.player.body.setVelocity(0, 0);
+        this.opponent.body.setVelocity(0, 0);
+        
+        this.statusText.setText('');
+        this.roundEnded = false;
+        this.updateHealthBars();
+        this.aiActionQueue = [];
     }
 
     checkOverlap(r1, r2) {
