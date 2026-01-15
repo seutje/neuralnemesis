@@ -4,7 +4,7 @@ const N_STACK = 4;
 const FEATURES = 14;
 
 class ReplayBuffer {
-    constructor(maxSize = 2000) {
+    constructor(maxSize = 5000) {
         this.buffer = [];
         this.maxSize = maxSize;
     }
@@ -31,35 +31,42 @@ class ReplayBuffer {
 let model = null;
 let normStats = null;
 let frameBuffer = [];
-let optimizer = null;
 let replayBuffer = new ReplayBuffer();
+let isInitialized = false;
+let outputNames = [];
 
 async function init() {
-    console.log("AI Worker: Initializing TFJS...");
-    // Force CPU backend for compatibility and performance on small models
-    await tf.setBackend('cpu');
-    console.log("AI Worker: TFJS Backend:", tf.getBackend());
-    optimizer = tf.train.adam(3e-4);
-}
-
-async function loadModelAndStats() {
     try {
-        console.log("AI Worker: Loading model...");
+        console.log("AI Worker: Starting Initialization...");
+        await tf.setBackend('cpu');
+        await tf.ready();
+        console.log("AI Worker: TFJS Backend:", tf.getBackend());
+        
+        console.log("AI Worker: Loading model from /assets/model/model.json");
         model = await tf.loadGraphModel('/assets/model/model.json');
-        console.log("AI Worker: Model loaded successfully");
+        
+        // Detect output names
+        outputNames = model.outputs.map(o => o.name);
+        console.log("AI Worker: Model loaded. Output names:", outputNames);
 
+        console.log("AI Worker: Fetching normalization stats...");
         const statsResponse = await fetch('/assets/model/norm_stats.json');
         normStats = await statsResponse.json();
         console.log("AI Worker: Normalization stats loaded");
+        
+        isInitialized = true;
+        self.postMessage({ type: 'ready' });
     } catch (e) {
-        console.error("AI Worker: Failed to load assets", e);
+        console.error("AI Worker: Initialization failed", e);
+        self.postMessage({ type: 'error', payload: e.message });
     }
 }
 
 function normalize(obs) {
     if (!normStats) return obs;
     return obs.map((val, i) => {
-        return (val - normStats.mean[i]) / Math.sqrt(normStats.variance[i] + normStats.epsilon);
+        const statsIdx = i % normStats.mean.length;
+        return (val - normStats.mean[statsIdx]) / Math.sqrt(normStats.variance[statsIdx] + (normStats.epsilon || 1e-8));
     });
 }
 
@@ -75,23 +82,15 @@ function updateFrameBuffer(newState) {
     return frameBuffer;
 }
 
-async function trainOnBuffer() {
-    if (replayBuffer.length < 32 || !model) return;
-    
-    console.log("AI Worker: Online Training Burst...");
-    // Demonstration of the training pipeline
-    // In GraphModel, we can't easily use minimize() without rebuilding the graph
-    // For Phase 4, we log the process.
-    console.log(`AI Worker: Sampling ${replayBuffer.length} experiences`);
-}
-
 self.onmessage = async (e) => {
     const { type, payload } = e.data;
     
     if (type === 'init') {
-        await init();
-        await loadModelAndStats();
-        self.postMessage({ type: 'ready' });
+        if (!isInitialized) {
+            await init();
+        } else {
+            self.postMessage({ type: 'ready' });
+        }
         return;
     }
 
@@ -100,34 +99,43 @@ self.onmessage = async (e) => {
         if (replayBuffer.length % 100 === 0) {
             self.postMessage({ type: 'stats', bufferSize: replayBuffer.length });
         }
-        if (replayBuffer.length % 500 === 0) {
-            await trainOnBuffer();
-        }
         return;
     }
     
     if (type === 'predict') {
-        if (!model || !normStats) return;
+        if (!isInitialized || !model) return;
 
         updateFrameBuffer(payload);
         const normalizedStack = normalize(frameBuffer);
 
-        tf.tidy(() => {
-            const inputTensor = tf.tensor2d([normalizedStack], [1, FEATURES * N_STACK]);
-            const results = model.predict(inputTensor);
-            
-            // model.predict returns [logits, value] based on our export
-            const logits = results[0];
-            const value = results[1];
-            
-            const actionTensor = logits.argMax(-1);
-            const action = actionTensor.dataSync()[0];
-            
-            self.postMessage({ 
-                type: 'action', 
-                payload: action,
-                confidence: value.dataSync()[0]
+        try {
+            tf.tidy(() => {
+                const inputTensor = tf.tensor2d([normalizedStack], [1, FEATURES * N_STACK]);
+                
+                // Execute and handle multiple outputs dynamically
+                const results = model.execute(inputTensor, outputNames);
+                
+                let logits, value;
+                // Heuristic to find logits vs value
+                if (results[0].shape[1] === 9) {
+                    logits = results[0];
+                    value = results[1];
+                } else {
+                    logits = results[1];
+                    value = results[0];
+                }
+                
+                const action = logits.argMax(-1).dataSync()[0];
+                const confidence = value.dataSync()[0];
+                
+                self.postMessage({ 
+                    type: 'action', 
+                    payload: action,
+                    confidence: confidence
+                });
             });
-        });
+        } catch (err) {
+            console.error("AI Worker: Prediction error", err);
+        }
     }
 };

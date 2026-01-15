@@ -20,10 +20,11 @@ export default class MainScene extends Phaser.Scene {
         this.WIDTH = 800;
         this.HEIGHT = 600;
         this.GROUND_Y = 500;
+        this.isAiReady = false;
+        this.waitingForPrediction = false;
     }
 
     preload() {
-        // No assets yet, using graphics
     }
 
     create() {
@@ -62,47 +63,27 @@ export default class MainScene extends Phaser.Scene {
         // AI Debug UI
         this.debugContainer = this.add.container(20, 100);
         const bg = this.add.rectangle(0, 0, 180, 100, 0x000000, 0.7).setOrigin(0);
-        this.confidenceText = this.add.text(10, 10, 'AI Confidence: 0%', { fontSize: '14px', fill: '#0ff' });
-        this.intentText = this.add.text(10, 35, 'Intent: Idle', { fontSize: '14px', fill: '#f0f' });
+        this.confidenceText = this.add.text(10, 10, 'AI Confidence: ---', { fontSize: '14px', fill: '#0ff' });
+        this.intentText = this.add.text(10, 35, 'Intent: ---', { fontSize: '14px', fill: '#f0f' });
         this.bufferText = this.add.text(10, 60, 'Memories: 0', { fontSize: '14px', fill: '#ff0' });
         
         this.debugContainer.add([bg, this.confidenceText, this.intentText, this.bufferText]);
     }
 
-    setupAI() {
-        this.aiWorker = new Worker(new URL('../ai/ai_worker.js', import.meta.url), { type: 'module' });
-        this.aiWorker.postMessage({ type: 'init' });
-        this.aiWorker.onmessage = (e) => {
-            if (e.data.type === 'action') {
-                this.executeAIAction(e.data.payload);
-                
-                // Update Debug UI
-                const conf = (e.data.confidence * 100).toFixed(1);
-                this.confidenceText.setText(`AI Confidence: ${conf}%`);
-                
-                const actions = ['Idle', 'Left', 'Right', 'Jump', 'Crouch', 'Block', 'Light', 'Heavy', 'Special'];
-                this.intentText.setText(`Intent: ${actions[e.data.payload]}`);
-            }
-            if (e.data.type === 'stats') {
-                this.bufferText.setText(`Memories: ${e.data.bufferSize}`);
-            }
-            if (e.data.type === 'ready') {
-                document.getElementById('ai-status').innerText = 'Online';
-            }
-        };
-    }
-
-
     updateHealthBars() {
         this.p1HealthBar.clear();
-        this.p1HealthBar.fillStyle(0x00ff00, 1);
-        this.p1HealthBar.fillRect(50, 50, this.gameState.p1_health * 2, 20);
+        this.p1HealthBar.fillStyle(0xff0000, 0.3); // Background
+        this.p1HealthBar.fillRect(50, 50, 200, 20);
+        this.p1HealthBar.fillStyle(0x00ff00, 1); // Foreground
+        this.p1HealthBar.fillRect(50, 50, Math.max(0, this.gameState.p1_health) * 2, 20);
         this.p1HealthBar.lineStyle(2, 0xffffff);
         this.p1HealthBar.strokeRect(50, 50, 200, 20);
 
         this.p2HealthBar.clear();
+        this.p2HealthBar.fillStyle(0xff0000, 0.3);
+        this.p2HealthBar.fillRect(550, 50, 200, 20);
         this.p2HealthBar.fillStyle(0x00ff00, 1);
-        this.p2HealthBar.fillRect(550, 50, this.gameState.p2_health * 2, 20);
+        this.p2HealthBar.fillRect(550, 50, Math.max(0, this.gameState.p2_health) * 2, 20);
         this.p2HealthBar.lineStyle(2, 0xffffff);
         this.p2HealthBar.strokeRect(550, 50, 200, 20);
     }
@@ -111,14 +92,48 @@ export default class MainScene extends Phaser.Scene {
         this.aiWorker = new Worker(new URL('../ai/ai_worker.js', import.meta.url), { type: 'module' });
         this.aiWorker.postMessage({ type: 'init' });
         this.aiWorker.onmessage = (e) => {
-            if (e.data.type === 'action') {
-                this.executeAIAction(e.data.payload);
+            const { type, payload, confidence, bufferSize } = e.data;
+            
+            if (type === 'ready') {
+                console.log("MainThread: AI Worker is READY");
+                this.isAiReady = true;
+                document.getElementById('ai-status').innerText = 'Online';
+                document.getElementById('ai-status').style.color = '#0f0';
+            }
+            
+            if (type === 'action') {
+                this.executeAIAction(payload);
+                this.waitingForPrediction = false;
+                
+                // Update Debug UI
+                this.confidenceText.setText(`AI Confidence: ${(confidence).toFixed(2)}`);
+                const actions = ['Idle', 'Left', 'Right', 'Jump', 'Crouch', 'Block', 'Light', 'Heavy', 'Special'];
+                this.intentText.setText(`Intent: ${actions[payload]}`);
+            }
+
+            if (type === 'stats') {
+                this.bufferText.setText(`Memories: ${bufferSize}`);
+            }
+
+            if (type === 'error') {
+                console.error("MainThread: AI Worker error", payload);
+                document.getElementById('ai-status').innerText = 'Error';
+                document.getElementById('ai-status').style.color = '#f00';
             }
         };
     }
 
     handlePlayerInput() {
-        if (this.gameState.p1_stun > 0 || this.gameState.p1_attacking > 0) return;
+        if (this.gameState.p1_stun > 0) {
+            this.player.body.setVelocityX(0);
+            return;
+        }
+
+        if (this.gameState.p1_attacking > 0) {
+            // Can't move while attacking
+            this.player.body.setVelocityX(0);
+            return;
+        }
 
         this.gameState.p1_blocking = false;
         let vx = 0;
@@ -148,7 +163,6 @@ export default class MainScene extends Phaser.Scene {
         if (this.gameState.p2_stun > 0 || this.gameState.p2_attacking > 0) return;
 
         this.lastAIAction = action;
-
         this.gameState.p2_blocking = false;
         let vx = 0;
 
@@ -175,6 +189,8 @@ export default class MainScene extends Phaser.Scene {
     update() {
         if (this.gameState.p1_health <= 0 || this.gameState.p2_health <= 0) {
             this.statusText.setText(this.gameState.p1_health <= 0 ? 'AI WINS' : 'PLAYER WINS');
+            this.player.body.setVelocityX(0);
+            this.opponent.body.setVelocityX(0);
             return;
         }
 
@@ -199,28 +215,32 @@ export default class MainScene extends Phaser.Scene {
 
         const currentState = this.captureGameState();
         
-        // Calculate reward for the AI (P2)
-        // AI Reward = 10 * (damage dealt to P1) - 10 * (damage taken by P2) + approach
-        let reward = 10.0 * (prevH1 - this.gameState.p1_health);
-        reward -= 10.0 * (prevH2 - this.gameState.p2_health);
-        const dist = Math.abs(this.player.x - this.opponent.x) / this.WIDTH;
-        reward += 0.005 * (1.0 - dist);
+        if (this.isAiReady) {
+            // AI Reward Calculation
+            let reward = 10.0 * (prevH1 - this.gameState.p1_health);
+            reward -= 10.0 * (prevH2 - this.gameState.p2_health);
+            const dist = Math.abs(this.player.x - this.opponent.x) / this.WIDTH;
+            reward += 0.005 * (1.0 - dist);
 
-        // Send state to AI for next action
-        this.aiWorker.postMessage({ type: 'predict', payload: currentState });
+            // Store experience
+            if (this.lastAIAction !== undefined) {
+                this.aiWorker.postMessage({ 
+                    type: 'store_experience', 
+                    payload: {
+                        state: prevState,
+                        action: this.lastAIAction,
+                        reward: reward,
+                        nextState: currentState,
+                        done: false
+                    }
+                });
+            }
 
-        // Store experience
-        if (this.lastAIAction !== undefined) {
-            this.aiWorker.postMessage({ 
-                type: 'store_experience', 
-                payload: {
-                    state: prevState,
-                    action: this.lastAIAction,
-                    reward: reward,
-                    nextState: currentState,
-                    done: false
-                }
-            });
+            // Predict next action
+            if (!this.waitingForPrediction) {
+                this.waitingForPrediction = true;
+                this.aiWorker.postMessage({ type: 'predict', payload: currentState });
+            }
         }
     }
 
@@ -236,11 +256,9 @@ export default class MainScene extends Phaser.Scene {
 
             if (this.checkOverlap(reach_rect, p2_rect)) {
                 if (!this.gameState.p2_blocking) {
-                    this.gameState.p2_health -= 0.5; // Damage per frame while overlapping? 
-                    // To match Python which is step-based, we should probably only damage once.
-                    // But here update() runs at 60fps.
+                    this.gameState.p2_health -= 1.0;
                     this.gameState.p2_stun = this.STUN_DURATION;
-                    this.gameState.p2_attacking = 0;
+                    this.gameState.p2_attacking = 0; // Interrupt
                 }
             }
         }
@@ -253,9 +271,9 @@ export default class MainScene extends Phaser.Scene {
 
             if (this.checkOverlap(reach_rect, p1_rect)) {
                 if (!this.gameState.p1_blocking) {
-                    this.gameState.p1_health -= 0.5;
+                    this.gameState.p1_health -= 1.0;
                     this.gameState.p1_stun = this.STUN_DURATION;
-                    this.gameState.p1_attacking = 0;
+                    this.gameState.p1_attacking = 0; // Interrupt
                 }
             }
         }
@@ -269,8 +287,6 @@ export default class MainScene extends Phaser.Scene {
     }
 
     captureGameState() {
-        // Matching Python observation space (14 features)
-        // Note: dx, dy are P2 relative to P1
         const dx = (this.opponent.x - this.player.x) / this.WIDTH;
         const dy = (this.opponent.y - this.player.y) / this.HEIGHT;
         
@@ -278,7 +294,7 @@ export default class MainScene extends Phaser.Scene {
             dx, dy,
             this.gameState.p1_health / 100,
             this.gameState.p2_health / 100,
-            this.player.body.velocity.x / 300, // Normalized roughly
+            this.player.body.velocity.x / 300,
             this.player.body.velocity.y / 500,
             this.opponent.body.velocity.x / 300,
             this.opponent.body.velocity.y / 500,
