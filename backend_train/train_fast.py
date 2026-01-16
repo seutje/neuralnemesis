@@ -8,10 +8,9 @@ from envs.fighting_env import FightingGameEnv
 import os
 
 def make_env(rank, seed=0):
-# ... (rest of the function remains same)
     def _init():
         env = FightingGameEnv()
-        env = TimeLimit(env, max_episode_steps=2000)
+        env = TimeLimit(env, max_episode_steps=800)
         env = Monitor(env)
         env.reset(seed=seed + rank)
         return env
@@ -39,13 +38,14 @@ def train():
         device="cpu", 
         verbose=1,
         tensorboard_log="./logs/ppo_fighting_fast/",
-        learning_rate=3e-4,
-        n_steps=1024,
+        learning_rate=3e-4, 
+        n_steps=2048, 
         batch_size=256,
         n_epochs=10,
         gamma=0.99,
         gae_lambda=0.95,
         clip_range=0.2,
+        ent_coef=0.05, # Significantly higher entropy to break the "idling" local optimum
     )
     
     # 4. Callbacks
