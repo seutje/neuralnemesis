@@ -47,12 +47,17 @@ class FightingGameEnv(gym.Env):
 
         self.STUN_DURATION = 20 # Base
         self.ATTACK_REACH = 90
+        self.KNOCKBACK_VICTIM = 10.0
+        self.KNOCKBACK_ATTACKER = 5.0
+        self.DRAG = 0.8
         
         self.reset()
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
         self.current_step = 0
+        
+        # Seeded random number generator is now in self.np_random from super().reset()
         
         # Opponent (P2) Action Persistence
         self.p2_action_timer = 0
@@ -172,11 +177,10 @@ class FightingGameEnv(gym.Env):
 
         # Can't move if stunned or attacking
         if stun > 0:
-            vx = 0
             blocking = False
             crouching = False
         elif attack_timer > 0:
-            pass # Keep momentum or frozen? For now frozen
+            pass # Keep momentum
         else:
             blocking = False
             crouching = False
@@ -202,21 +206,21 @@ class FightingGameEnv(gym.Env):
                 attack_timer = self.LIGHT_ATTACK_DUR
                 if player_num == 1: self.p1_has_hit = False
                 else: self.p2_has_hit = False
-                vx = 0
+                vx = 0 # Initial stop
             elif action == 7: # Heavy Attack
                 attacking = 2
                 attack_timer = self.HEAVY_ATTACK_DUR
                 if player_num == 1: self.p1_has_hit = False
                 else: self.p2_has_hit = False
-                vx = 0
+                vx = 0 # Initial stop
             elif action == 8: # Special
                 attacking = 3
                 attack_timer = self.SPECIAL_ATTACK_DUR
                 if player_num == 1: self.p1_has_hit = False
                 else: self.p2_has_hit = False
-                vx = 0
+                vx = 0 # Initial stop
             else: # Idle
-                vx = 0
+                pass # Don't reset vx, let it decay
 
         if player_num == 1:
             self.p1_vx = vx
@@ -239,6 +243,10 @@ class FightingGameEnv(gym.Env):
             self.p1_x += self.p1_vx
             self.p1_y += self.p1_vy
             
+            # Apply horizontal drag
+            self.p1_vx *= self.DRAG
+            if abs(self.p1_vx) < 0.1: self.p1_vx = 0
+            
             ground_y = self.GROUND_Y - h
             if self.p1_y < ground_y:
                 self.p1_vy += self.GRAVITY
@@ -251,6 +259,10 @@ class FightingGameEnv(gym.Env):
             h = self.CROUCH_HEIGHT if self.p2_crouching else self.PLAYER_HEIGHT
             self.p2_x += self.p2_vx
             self.p2_y += self.p2_vy
+            
+            # Apply horizontal drag
+            self.p2_vx *= self.DRAG
+            if abs(self.p2_vx) < 0.1: self.p2_vx = 0
             
             ground_y = self.GROUND_Y - h
             if self.p2_y < ground_y:
@@ -311,6 +323,11 @@ class FightingGameEnv(gym.Env):
                         self.p2_attacking = 0
                         self.p1_has_hit = True
 
+                        # Knockback
+                        direction = 1 if self.p1_x < self.p2_x else -1
+                        self.p2_vx = direction * self.KNOCKBACK_VICTIM
+                        self.p1_vx = -direction * self.KNOCKBACK_ATTACKER
+
         # P2 Attacks P1
         if self.p2_attacking > 0 and not self.p2_has_hit:
             type_idx = self.p2_attacking
@@ -343,6 +360,11 @@ class FightingGameEnv(gym.Env):
                         self.p1_attack_timer = 0
                         self.p1_attacking = 0
                         self.p2_has_hit = True
+
+                        # Knockback
+                        direction = 1 if self.p2_x < self.p1_x else -1
+                        self.p1_vx = direction * self.KNOCKBACK_VICTIM
+                        self.p2_vx = -direction * self.KNOCKBACK_ATTACKER
 
         # Reward Function
         reward += 10.0 * (h_opp_prev - self.p2_health)

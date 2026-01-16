@@ -34,6 +34,8 @@ export default class MainScene extends Phaser.Scene {
 
         this.STUN_DURATION = 20; // Default/base
         this.ATTACK_REACH = 90;
+        this.KNOCKBACK_VICTIM = 500;
+        this.KNOCKBACK_ATTACKER = 250;
         this.WIDTH = 800;
         this.HEIGHT = 600;
         this.GROUND_Y = 500;
@@ -60,11 +62,13 @@ export default class MainScene extends Phaser.Scene {
         this.player = this.add.rectangle(200, 450, 50, 100, 0x0088ff);
         this.physics.add.existing(this.player);
         this.player.body.setCollideWorldBounds(true);
+        this.player.body.setDragX(1500);
 
         // P2 (AI) - Red
         this.opponent = this.add.rectangle(600, 450, 50, 100, 0xff4444);
         this.physics.add.existing(this.opponent);
         this.opponent.body.setCollideWorldBounds(true);
+        this.opponent.body.setDragX(1500);
 
         // UI
         this.createUI();
@@ -203,13 +207,11 @@ export default class MainScene extends Phaser.Scene {
 
     handlePlayerInput() {
         if (this.gameState.p1_stun > 0) {
-            this.player.body.setVelocityX(0);
             return;
         }
 
         if (this.gameState.p1_attacking > 0) {
-            // Can't move while attacking
-            this.player.body.setVelocityX(0);
+            // Can't initiate movement while attacking, but allow existing momentum (knockback)
             return;
         }
 
@@ -489,6 +491,11 @@ export default class MainScene extends Phaser.Scene {
                         this.gameState.p2_attack_timer = 0;
                         this.gameState.p2_attacking = 0;
                         this.gameState.p1_has_hit = true;
+
+                        // Knockback
+                        const dir = this.player.x < this.opponent.x ? 1 : -1;
+                        this.opponent.body.setVelocityX(dir * this.KNOCKBACK_VICTIM);
+                        this.player.body.setVelocityX(-dir * this.KNOCKBACK_ATTACKER);
                     }
                 }
             }
@@ -528,6 +535,11 @@ export default class MainScene extends Phaser.Scene {
                         this.gameState.p1_attack_timer = 0;
                         this.gameState.p1_attacking = 0;
                         this.gameState.p2_has_hit = true;
+
+                        // Knockback
+                        const dir = this.opponent.x < this.player.x ? 1 : -1;
+                        this.player.body.setVelocityX(dir * this.KNOCKBACK_VICTIM);
+                        this.opponent.body.setVelocityX(-dir * this.KNOCKBACK_ATTACKER);
                     }
                 }
             }
