@@ -40,7 +40,7 @@ class FightingGameEnv(gym.Env):
         self.LIGHT_PHASES = [4, 6, 12]   # Startup, Active, Recovery
         self.HEAVY_PHASES = [10, 8, 20]
         self.SPECIAL_PHASES = [15, 10, 35]
-
+        
         self.LIGHT_STUN = 18
         self.HEAVY_STUN = 35
         self.SPECIAL_STUN = 55
@@ -63,8 +63,15 @@ class FightingGameEnv(gym.Env):
         self.p2_action_timer = 0
         self.p2_current_action = 0
         
-        # Player 1 (AI) - Now starts on the RIGHT
-        self.p1_x = 600
+        # Randomize starting positions to prevent directional bias
+        side = self.np_random.choice([0, 1])
+        if side == 0:
+            self.p1_x = 200
+            self.p2_x = 600
+        else:
+            self.p1_x = 600
+            self.p2_x = 200
+
         self.p1_y = self.GROUND_Y - self.PLAYER_HEIGHT
         self.p1_vx = 0
         self.p1_vy = 0
@@ -76,8 +83,6 @@ class FightingGameEnv(gym.Env):
         self.p1_blocking = False
         self.p1_crouching = False
         
-        # Player 2 (Opponent) - Now starts on the LEFT
-        self.p2_x = 200
         self.p2_y = self.GROUND_Y - self.PLAYER_HEIGHT
         self.p2_vx = 0
         self.p2_vy = 0
@@ -92,6 +97,7 @@ class FightingGameEnv(gym.Env):
         return self._get_obs(), {}
 
     def _get_obs(self):
+        # dx, dy: Relative distance between players (normalized to [-1, 1])
         dx = (self.p2_x - self.p1_x) / self.WIDTH
         dy = (self.p2_y - self.p1_y) / self.HEIGHT
         
@@ -99,9 +105,9 @@ class FightingGameEnv(gym.Env):
             dx, dy,
             self.p1_health / self.MAX_HEALTH,
             self.p2_health / self.MAX_HEALTH,
-            self.p1_vx / 10.0,
-            self.p1_vy / 15.0,
-            self.p2_vx / 10.0,
+            self.p1_vx / 5.0,  # Max walk speed is 5
+            self.p1_vy / 15.0, # Max jump force is 15
+            self.p2_vx / 5.0,
             self.p2_vy / 15.0,
             1.0 if self.p1_stun > 0 else 0.0,
             1.0 if self.p1_attack_timer > 0 else 0.0,
@@ -366,9 +372,20 @@ class FightingGameEnv(gym.Env):
                         self.p1_vx = direction * self.KNOCKBACK_VICTIM
                         self.p2_vx = -direction * self.KNOCKBACK_ATTACKER
 
-        # Reward Function
-        reward += 10.0 * (h_opp_prev - self.p2_health)
-        reward -= 10.0 * (h_self_prev - self.p1_health)
+        # Reward Function (Design.md Section 3.3)
+        # alpha=10, beta=15 (Higher penalty for taking damage)
+        damage_dealt = max(0, h_opp_prev - self.p2_health)
+        damage_taken = max(0, h_self_prev - self.p1_health)
+        
+        reward += 10.0 * damage_dealt
+        reward -= 15.0 * damage_taken
+        
+        # Proximity reward to encourage engagement
         dist = abs(self.p1_x - self.p2_x) / self.WIDTH
-        reward += 0.005 * (1.0 - dist)
+        reward += 0.01 * (1.0 - dist)
+        
+        # Corner penalty: Negative reward for being trapped at boundaries
+        if self.p1_x < 50 or self.p1_x > self.WIDTH - 100:
+            reward -= 0.05
+            
         return reward
