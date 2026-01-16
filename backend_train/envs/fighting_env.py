@@ -32,13 +32,21 @@ class FightingGameEnv(gym.Env):
         self.MAX_HEALTH = 100
         self.MAX_STEPS = 2000 # 2000 frames is about 33 seconds at 60fps
         
-        # Frame data (simplified)
-        self.LIGHT_ATTACK_DUR = 20
-        self.HEAVY_ATTACK_DUR = 35
-        self.SPECIAL_ATTACK_DUR = 55
+        # Frame data (Updated to match frontend)
+        self.LIGHT_ATTACK_DUR = 22
+        self.HEAVY_ATTACK_DUR = 38
+        self.SPECIAL_ATTACK_DUR = 60
         
-        self.STUN_DURATION = 30
-        self.ATTACK_REACH = 90 # Increased reach to ensure hits land from a distance
+        self.LIGHT_PHASES = [4, 6, 12]   # Startup, Active, Recovery
+        self.HEAVY_PHASES = [10, 8, 20]
+        self.SPECIAL_PHASES = [15, 10, 35]
+
+        self.LIGHT_STUN = 18
+        self.HEAVY_STUN = 35
+        self.SPECIAL_STUN = 55
+
+        self.STUN_DURATION = 20 # Base
+        self.ATTACK_REACH = 90
         
         self.reset()
 
@@ -59,6 +67,7 @@ class FightingGameEnv(gym.Env):
         self.p1_stun = 0
         self.p1_attacking = 0 # 0: none, 1: light, 2: heavy, 3: special
         self.p1_attack_timer = 0
+        self.p1_has_hit = False
         self.p1_blocking = False
         self.p1_crouching = False
         
@@ -71,6 +80,7 @@ class FightingGameEnv(gym.Env):
         self.p2_stun = 0
         self.p2_attacking = 0 # 0: none, 1: light, 2: heavy, 3: special
         self.p2_attack_timer = 0
+        self.p2_has_hit = False
         self.p2_blocking = False
         self.p2_crouching = False
         
@@ -190,14 +200,20 @@ class FightingGameEnv(gym.Env):
             elif action == 6: # Light Attack
                 attacking = 1
                 attack_timer = self.LIGHT_ATTACK_DUR
+                if player_num == 1: self.p1_has_hit = False
+                else: self.p2_has_hit = False
                 vx = 0
             elif action == 7: # Heavy Attack
                 attacking = 2
                 attack_timer = self.HEAVY_ATTACK_DUR
+                if player_num == 1: self.p1_has_hit = False
+                else: self.p2_has_hit = False
                 vx = 0
             elif action == 8: # Special
                 attacking = 3
                 attack_timer = self.SPECIAL_ATTACK_DUR
+                if player_num == 1: self.p1_has_hit = False
+                else: self.p2_has_hit = False
                 vx = 0
             else: # Idle
                 vx = 0
@@ -258,75 +274,79 @@ class FightingGameEnv(gym.Env):
         p1_rect = [self.p1_x, self.p1_y, self.PLAYER_WIDTH, p1_h]
         p2_rect = [self.p2_x, self.p2_y, self.PLAYER_WIDTH, p2_h]
         
-        # Extend hitboxes based on reach if attacking
-        p1_attack_rect = p1_rect.copy()
-        if self.p1_attack_timer > 0:
-            reach = self.ATTACK_REACH
-            if self.p1_attacking == 2: reach += 20 # Heavy reach
-            if self.p1_attacking == 3: reach += 50 # Special reach
-            
-            if self.p1_x < self.p2_x: # Facing right
-                p1_attack_rect[2] += reach
-            else: # Facing left
-                p1_attack_rect[0] -= reach
-                p1_attack_rect[2] += reach
-
-        p2_attack_rect = p2_rect.copy()
-        if self.p2_attack_timer > 0:
-            reach = self.ATTACK_REACH
-            if self.p2_attacking == 2: reach += 20
-            if self.p2_attacking == 3: reach += 50
-
-            if self.p2_x < self.p1_x: # Facing right
-                p2_attack_rect[2] += reach
-            else: # Facing left
-                p2_attack_rect[0] -= reach
-                p2_attack_rect[2] += reach
-
         def check_collision(r1, r2):
             return r1[0] < r2[0] + r2[2] and r1[0] + r1[2] > r2[0] and \
                    r1[1] < r2[1] + r2[3] and r1[1] + r1[3] > r2[1]
 
         # P1 Attacks P2
-        if self.p1_attack_timer > 0 and check_collision(p1_attack_rect, p2_rect):
-            if not self.p2_blocking:
-                damage = 2
-                stun = self.STUN_DURATION
-                if self.p1_attacking == 2:
-                    damage = 5
-                    stun += 15
-                elif self.p1_attacking == 3:
-                    damage = 10
-                    stun += 40
+        if self.p1_attacking > 0 and not self.p1_has_hit:
+            type_idx = self.p1_attacking
+            timer = self.p1_attack_timer
+            if type_idx == 1: phases, total_dur = self.LIGHT_PHASES, self.LIGHT_ATTACK_DUR
+            elif type_idx == 2: phases, total_dur = self.HEAVY_PHASES, self.HEAVY_ATTACK_DUR
+            else: phases, total_dur = self.SPECIAL_PHASES, self.SPECIAL_ATTACK_DUR
+            
+            elapsed = total_dur - timer
+            is_active = elapsed >= phases[0] and elapsed < (phases[0] + phases[1])
+            
+            if is_active:
+                reach = self.ATTACK_REACH
+                if type_idx == 2: reach += 20
+                if type_idx == 3: reach += 50
                 
-                self.p2_health -= damage
-                self.p2_stun = stun
-                self.p2_attack_timer = 0 # INTERRUPT
-                self.p2_attacking = 0
+                p1_attack_rect = p1_rect.copy()
+                if self.p1_x < self.p2_x: p1_attack_rect[2] += reach
+                else: p1_attack_rect[0] -= reach; p1_attack_rect[2] += reach
                 
+                if check_collision(p1_attack_rect, p2_rect):
+                    if not self.p2_blocking:
+                        damage = 1.5
+                        stun = self.LIGHT_STUN
+                        if type_idx == 2: damage, stun = 4.0, self.HEAVY_STUN
+                        elif type_idx == 3: damage, stun = 8.0, self.SPECIAL_STUN
+                        
+                        self.p2_health -= damage
+                        self.p2_stun = stun
+                        self.p2_attack_timer = 0
+                        self.p2_attacking = 0
+                        self.p1_has_hit = True
+
         # P2 Attacks P1
-        if self.p2_attack_timer > 0 and check_collision(p2_attack_rect, p1_rect):
-            if not self.p1_blocking:
-                damage = 2
-                stun = self.STUN_DURATION
-                if self.p2_attacking == 2:
-                    damage = 5
-                    stun += 15
-                elif self.p2_attacking == 3:
-                    damage = 10
-                    stun += 40
+        if self.p2_attacking > 0 and not self.p2_has_hit:
+            type_idx = self.p2_attacking
+            timer = self.p2_attack_timer
+            if type_idx == 1: phases, total_dur = self.LIGHT_PHASES, self.LIGHT_ATTACK_DUR
+            elif type_idx == 2: phases, total_dur = self.HEAVY_PHASES, self.HEAVY_ATTACK_DUR
+            else: phases, total_dur = self.SPECIAL_PHASES, self.SPECIAL_ATTACK_DUR
+            
+            elapsed = total_dur - timer
+            is_active = elapsed >= phases[0] and elapsed < (phases[0] + phases[1])
+            
+            if is_active:
+                reach = self.ATTACK_REACH
+                if type_idx == 2: reach += 20
+                if type_idx == 3: reach += 50
+                
+                p2_attack_rect = p2_rect.copy()
+                if self.p2_x < self.p1_x: p2_attack_rect[2] += reach
+                else: p2_attack_rect[0] -= reach; p2_attack_rect[2] += reach
+                
+                if check_collision(p2_attack_rect, p1_rect):
+                    if not self.p1_blocking:
+                        damage = 1.5
+                        stun = self.LIGHT_STUN
+                        if type_idx == 2: damage, stun = 4.0, self.HEAVY_STUN
+                        elif type_idx == 3: damage, stun = 8.0, self.SPECIAL_STUN
+                        
+                        self.p1_health -= damage
+                        self.p1_stun = stun
+                        self.p1_attack_timer = 0
+                        self.p1_attacking = 0
+                        self.p2_has_hit = True
 
-                self.p1_health -= damage
-                self.p1_stun = stun
-                self.p1_attack_timer = 0 # INTERRUPT
-                self.p1_attacking = 0
-
-        # Reward Function - Recalibrated for Aggression
+        # Reward Function
         reward += 10.0 * (h_opp_prev - self.p2_health)
         reward -= 10.0 * (h_self_prev - self.p1_health)
-        
-        # Approach Incentive: moderate to guide towards combat
         dist = abs(self.p1_x - self.p2_x) / self.WIDTH
         reward += 0.005 * (1.0 - dist)
-        
         return reward

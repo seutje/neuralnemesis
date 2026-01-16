@@ -10,15 +10,29 @@ export default class MainScene extends Phaser.Scene {
             p2_stun: 0,
             p1_attacking: 0,
             p2_attacking: 0,
+            p1_attack_timer: 0,
+            p2_attack_timer: 0,
+            p1_has_hit: false,
+            p2_has_hit: false,
             p1_blocking: false,
             p2_blocking: false,
         };
         this.MAX_HEALTH = 100;
-        this.LIGHT_ATTACK_DUR = 20;
-        this.HEAVY_ATTACK_DUR = 35;
-        this.SPECIAL_ATTACK_DUR = 55;
         
-        this.STUN_DURATION = 30;
+        // Attack Phase Data: [Startup, Active, Recovery]
+        this.LIGHT_ATTACK_PHASES = [4, 6, 12];   // Total 22
+        this.HEAVY_ATTACK_PHASES = [10, 8, 20];  // Total 38
+        this.SPECIAL_ATTACK_PHASES = [15, 10, 35]; // Total 60
+
+        this.LIGHT_ATTACK_DUR = 22;
+        this.HEAVY_ATTACK_DUR = 38;
+        this.SPECIAL_ATTACK_DUR = 60;
+        
+        this.LIGHT_STUN = 18;
+        this.HEAVY_STUN = 35;
+        this.SPECIAL_STUN = 55;
+
+        this.STUN_DURATION = 20; // Default/base
         this.ATTACK_REACH = 90;
         this.WIDTH = 800;
         this.HEIGHT = 600;
@@ -180,14 +194,17 @@ export default class MainScene extends Phaser.Scene {
         if (Phaser.Input.Keyboard.JustDown(this.keys.J)) {
             this.gameState.p1_attacking = 1; // Light
             this.gameState.p1_attack_timer = this.LIGHT_ATTACK_DUR;
+            this.gameState.p1_has_hit = false;
             vx = 0;
         } else if (Phaser.Input.Keyboard.JustDown(this.keys.K)) {
             this.gameState.p1_attacking = 2; // Heavy
             this.gameState.p1_attack_timer = this.HEAVY_ATTACK_DUR;
+            this.gameState.p1_has_hit = false;
             vx = 0;
         } else if (Phaser.Input.Keyboard.JustDown(this.keys.L)) {
             this.gameState.p1_attacking = 3; // Special
             this.gameState.p1_attack_timer = this.SPECIAL_ATTACK_DUR;
+            this.gameState.p1_has_hit = false;
             vx = 0;
         }
 
@@ -234,14 +251,17 @@ export default class MainScene extends Phaser.Scene {
         if (action === 6) { // Light Attack
             this.gameState.p2_attacking = 1;
             this.gameState.p2_attack_timer = this.LIGHT_ATTACK_DUR;
+            this.gameState.p2_has_hit = false;
             vx = 0;
         } else if (action === 7) { // Heavy Attack
             this.gameState.p2_attacking = 2;
             this.gameState.p2_attack_timer = this.HEAVY_ATTACK_DUR;
+            this.gameState.p2_has_hit = false;
             vx = 0;
         } else if (action === 8) { // Special Attack
             this.gameState.p2_attacking = 3;
             this.gameState.p2_attack_timer = this.SPECIAL_ATTACK_DUR;
+            this.gameState.p2_has_hit = false;
             vx = 0;
         }
 
@@ -321,16 +341,38 @@ export default class MainScene extends Phaser.Scene {
         this.player.setAlpha(this.gameState.p1_stun > 0 ? 0.5 : 1);
         this.opponent.setAlpha(this.gameState.p2_stun > 0 ? 0.5 : 1);
         
-        // Attack colors
-        if (this.gameState.p1_attacking === 1) this.player.setFillStyle(0xffffff);
-        else if (this.gameState.p1_attacking === 2) this.player.setFillStyle(0xffff00);
-        else if (this.gameState.p1_attacking === 3) this.player.setFillStyle(0xff00ff);
-        else this.player.setFillStyle(0x0088ff);
+        // Attack colors with phase feedback
+        if (this.gameState.p1_attacking > 0) {
+            let type = this.gameState.p1_attacking;
+            let timer = this.gameState.p1_attack_timer;
+            let phases, total_dur, base_color;
+            if (type === 1) { phases = this.LIGHT_ATTACK_PHASES; total_dur = this.LIGHT_ATTACK_DUR; base_color = 0xffffff; }
+            else if (type === 2) { phases = this.HEAVY_ATTACK_PHASES; total_dur = this.HEAVY_ATTACK_DUR; base_color = 0xffff00; }
+            else { phases = this.SPECIAL_ATTACK_PHASES; total_dur = this.SPECIAL_ATTACK_DUR; base_color = 0xff00ff; }
 
-        if (this.gameState.p2_attacking === 1) this.opponent.setFillStyle(0xffffff);
-        else if (this.gameState.p2_attacking === 2) this.opponent.setFillStyle(0xffff00);
-        else if (this.gameState.p2_attacking === 3) this.opponent.setFillStyle(0xff00ff);
-        else this.opponent.setFillStyle(0xff4444);
+            const elapsed = total_dur - timer;
+            if (elapsed < phases[0]) this.player.setFillStyle(0x444444); // Startup (Gray)
+            else if (elapsed < phases[0] + phases[1]) this.player.setFillStyle(base_color); // Active
+            else this.player.setFillStyle(0x884400); // Recovery (Brown)
+        } else {
+            this.player.setFillStyle(0x0088ff);
+        }
+
+        if (this.gameState.p2_attacking > 0) {
+            let type = this.gameState.p2_attacking;
+            let timer = this.gameState.p2_attack_timer;
+            let phases, total_dur, base_color;
+            if (type === 1) { phases = this.LIGHT_ATTACK_PHASES; total_dur = this.LIGHT_ATTACK_DUR; base_color = 0xffffff; }
+            else if (type === 2) { phases = this.HEAVY_ATTACK_PHASES; total_dur = this.HEAVY_ATTACK_DUR; base_color = 0xffff00; }
+            else { phases = this.SPECIAL_ATTACK_PHASES; total_dur = this.SPECIAL_ATTACK_DUR; base_color = 0xff00ff; }
+
+            const elapsed = total_dur - timer;
+            if (elapsed < phases[0]) this.opponent.setFillStyle(0x444444);
+            else if (elapsed < phases[0] + phases[1]) this.opponent.setFillStyle(base_color);
+            else this.opponent.setFillStyle(0x884400);
+        } else {
+            this.opponent.setFillStyle(0xff4444);
+        }
 
         const currentState = this.captureGameState();
         
@@ -371,51 +413,79 @@ export default class MainScene extends Phaser.Scene {
         const p2_rect = { x: this.opponent.x - 25, y: this.opponent.y - (p2_h/2), w: 50, h: p2_h };
 
         // P1 Attacks
-        if (this.gameState.p1_attack_timer > 0) {
-            let reach = this.ATTACK_REACH;
-            if (this.gameState.p1_attacking === 2) reach += 20;
-            if (this.gameState.p1_attacking === 3) reach += 50;
+        if (this.gameState.p1_attacking > 0 && !this.gameState.p1_has_hit) {
+            let type = this.gameState.p1_attacking;
+            let timer = this.gameState.p1_attack_timer;
+            let phases, total_dur;
+            
+            if (type === 1) { phases = this.LIGHT_ATTACK_PHASES; total_dur = this.LIGHT_ATTACK_DUR; }
+            else if (type === 2) { phases = this.HEAVY_ATTACK_PHASES; total_dur = this.HEAVY_ATTACK_DUR; }
+            else { phases = this.SPECIAL_ATTACK_PHASES; total_dur = this.SPECIAL_ATTACK_DUR; }
 
-            let reach_rect = { ...p1_rect };
-            if (this.player.x < this.opponent.x) reach_rect.w += reach;
-            else { reach_rect.x -= reach; reach_rect.w += reach; }
+            const elapsed = total_dur - timer;
+            const is_active = elapsed >= phases[0] && elapsed < (phases[0] + phases[1]);
 
-            if (this.checkOverlap(reach_rect, p2_rect)) {
-                if (!this.gameState.p2_blocking) {
-                    let damage = 1.0;
-                    let stun = this.STUN_DURATION;
-                    if (this.gameState.p1_attacking === 2) { damage = 2.5; stun += 15; }
-                    if (this.gameState.p1_attacking === 3) { damage = 5.0; stun += 40; }
+            if (is_active) {
+                let reach = this.ATTACK_REACH;
+                if (type === 2) reach += 20;
+                if (type === 3) reach += 50;
 
-                    this.gameState.p2_health -= damage;
-                    this.gameState.p2_stun = stun;
-                    this.gameState.p2_attack_timer = 0;
-                    this.gameState.p2_attacking = 0; // Interrupt
+                let reach_rect = { ...p1_rect };
+                if (this.player.x < this.opponent.x) reach_rect.w += reach;
+                else { reach_rect.x -= reach; reach_rect.w += reach; }
+
+                if (this.checkOverlap(reach_rect, p2_rect)) {
+                    if (!this.gameState.p2_blocking) {
+                        let damage = 1.5;
+                        let stun = this.LIGHT_STUN;
+                        if (type === 2) { damage = 4.0; stun = this.HEAVY_STUN; }
+                        if (type === 3) { damage = 8.0; stun = this.SPECIAL_STUN; }
+
+                        this.gameState.p2_health -= damage;
+                        this.gameState.p2_stun = stun;
+                        this.gameState.p2_attack_timer = 0;
+                        this.gameState.p2_attacking = 0;
+                        this.gameState.p1_has_hit = true;
+                    }
                 }
             }
         }
 
         // P2 Attacks
-        if (this.gameState.p2_attack_timer > 0) {
-            let reach = this.ATTACK_REACH;
-            if (this.gameState.p2_attacking === 2) reach += 20;
-            if (this.gameState.p2_attacking === 3) reach += 50;
+        if (this.gameState.p2_attacking > 0 && !this.gameState.p2_has_hit) {
+            let type = this.gameState.p2_attacking;
+            let timer = this.gameState.p2_attack_timer;
+            let phases, total_dur;
+            
+            if (type === 1) { phases = this.LIGHT_ATTACK_PHASES; total_dur = this.LIGHT_ATTACK_DUR; }
+            else if (type === 2) { phases = this.HEAVY_ATTACK_PHASES; total_dur = this.HEAVY_ATTACK_DUR; }
+            else { phases = this.SPECIAL_ATTACK_PHASES; total_dur = this.SPECIAL_ATTACK_DUR; }
 
-            let reach_rect = { ...p2_rect };
-            if (this.opponent.x < this.player.x) reach_rect.w += reach;
-            else { reach_rect.x -= reach; reach_rect.w += reach; }
+            const elapsed = total_dur - timer;
+            const is_active = elapsed >= phases[0] && elapsed < (phases[0] + phases[1]);
 
-            if (this.checkOverlap(reach_rect, p1_rect)) {
-                if (!this.gameState.p1_blocking) {
-                    let damage = 1.0;
-                    let stun = this.STUN_DURATION;
-                    if (this.gameState.p2_attacking === 2) { damage = 2.5; stun += 15; }
-                    if (this.gameState.p2_attacking === 3) { damage = 5.0; stun += 40; }
+            if (is_active) {
+                let reach = this.ATTACK_REACH;
+                if (type === 2) reach += 20;
+                if (type === 3) reach += 50;
 
-                    this.gameState.p1_health -= damage;
-                    this.gameState.p1_stun = stun;
-                    this.gameState.p1_attack_timer = 0;
-                    this.gameState.p1_attacking = 0; // Interrupt
+                let reach_rect = { ...p2_rect };
+                if (this.opponent.x < this.player.x) reach_rect.w += reach;
+                else { reach_rect.x -= reach; reach_rect.w += reach; }
+
+                if (this.checkOverlap(reach_rect, p1_rect)) {
+                    if (!this.gameState.p1_blocking) {
+                        let damage = 1.5;
+                        let stun = this.LIGHT_STUN;
+                        if (type === 2) { damage = 4.0; stun = this.HEAVY_STUN; }
+                        if (type === 3) { damage = 8.0; stun = this.SPECIAL_STUN; }
+
+                        this.gameState.p1_health -= damage;
+                        this.gameState.p1_stun = stun;
+                        this.gameState.p1_attack_timer = 0;
+                        this.gameState.p1_attacking = 0;
+                        this.gameState.p2_has_hit = true;
+                    }
                 }
             }
         }
@@ -430,8 +500,10 @@ export default class MainScene extends Phaser.Scene {
         this.gameState.p2_stun = 0;
         this.gameState.p1_attacking = 0;
         this.gameState.p1_attack_timer = 0;
+        this.gameState.p1_has_hit = false;
         this.gameState.p2_attacking = 0;
         this.gameState.p2_attack_timer = 0;
+        this.gameState.p2_has_hit = false;
         this.gameState.p1_blocking = false;
         this.gameState.p2_blocking = false;
         this.gameState.p1_crouching = false;
