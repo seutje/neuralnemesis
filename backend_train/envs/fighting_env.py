@@ -145,9 +145,11 @@ class FightingGameEnv(gym.Env):
         if player_num == 1:
             stun, atk, tmr = self.p1_stun, self.p1_attacking, self.p1_attack_timer
             vx, vy, blk, crch = self.p1_vx, self.p1_vy, self.p1_blocking, self.p1_crouching
+            hit = self.p1_has_hit
         else:
             stun, atk, tmr = self.p2_stun, self.p2_attacking, self.p2_attack_timer
             vx, vy, blk, crch = self.p2_vx, self.p2_vy, self.p2_blocking, self.p2_crouching
+            hit = self.p2_has_hit
 
         if stun > 0: blk = crch = False
         elif tmr > 0: pass 
@@ -162,20 +164,25 @@ class FightingGameEnv(gym.Env):
                     else: self.p2_vy = self.JUMP_FORCE
             elif action == 4: vx = 0; crch = True
             elif action == 5: vx = 0; blk = True
-            elif action == 6: atk = 1; tmr = self.LIGHT_ATTACK_DUR; vx = 0
-            elif action == 7: atk = 2; tmr = self.HEAVY_ATTACK_DUR; vx = 0
-            elif action == 8: atk = 3; tmr = self.SPECIAL_ATTACK_DUR; vx = 0
+            elif action == 6: atk = 1; tmr = self.LIGHT_ATTACK_DUR; vx = 0; hit = False
+            elif action == 7: atk = 2; tmr = self.HEAVY_ATTACK_DUR; vx = 0; hit = False
+            elif action == 8: atk = 3; tmr = self.SPECIAL_ATTACK_DUR; vx = 0; hit = False
+
+        if tmr <= 0:
+            hit = False
 
         if player_num == 1:
             self.p1_vx, self.p1_stun = vx, max(0, stun - 1)
             self.p1_attacking = atk if tmr > 0 else 0
             self.p1_attack_timer = max(0, tmr - 1)
             self.p1_blocking, self.p1_crouching = blk, crch
+            self.p1_has_hit = hit
         else:
             self.p2_vx, self.p2_stun = vx, max(0, stun - 1)
             self.p2_attacking = atk if tmr > 0 else 0
             self.p2_attack_timer = max(0, tmr - 1)
             self.p2_blocking, self.p2_crouching = blk, crch
+            self.p2_has_hit = hit
 
     def _apply_physics(self, player_num):
         if player_num == 1:
