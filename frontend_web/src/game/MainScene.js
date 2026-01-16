@@ -44,6 +44,7 @@ export default class MainScene extends Phaser.Scene {
         this.isAiReady = false;
         this.waitingForPrediction = false;
         this.roundEnded = false;
+        this.lastDist = 0;
         
         // Humanizing AI: Action Queue
         this.aiActionQueue = [];
@@ -79,6 +80,12 @@ export default class MainScene extends Phaser.Scene {
 
         // AI Setup
         this.setupAI();
+
+        // Manual Reset Key
+        this.input.keyboard.on('keydown-R', () => {
+            console.log("MainThread: Requesting AI Reset...");
+            this.aiWorker.postMessage({ type: 'reset_weights' });
+        });
     }
 
     createUI() {
@@ -158,6 +165,11 @@ export default class MainScene extends Phaser.Scene {
         this.aiWorker.postMessage({ type: 'init' });
         this.aiWorker.onmessage = (e) => {
             const { type, payload, confidence, bufferSize, probs } = e.data;
+            
+            if (type === 'weights_reset') {
+                this.statusText.setText('AI RESET');
+                this.time.delayedCall(1000, () => this.statusText.setText(''));
+            }
             
             if (type === 'ready') {
                 console.log("MainThread: AI Worker is READY");
@@ -422,11 +434,23 @@ export default class MainScene extends Phaser.Scene {
         const currentState = this.captureGameState();
         
         if (this.isAiReady) {
-            // AI Reward Calculation
-            let reward = 10.0 * (prevH1 - this.gameState.p1_health);
-            reward -= 10.0 * (prevH2 - this.gameState.p2_health);
-            const dist = Math.abs(this.player.x - this.opponent.x) / this.WIDTH;
-            reward += 0.005 * (1.0 - dist);
+            // AI Reward Calculation (Synchronized with FightingGameEnv.py)
+            // Python: reward += 40.0 * dmg_dealt - 10.0 * dmg_taken
+            const dmg_dealt = Math.max(0, prevH1 - this.gameState.p1_health);
+            const dmg_taken = Math.max(0, prevH2 - this.gameState.p2_health);
+            let reward = 40.0 * dmg_dealt - 10.0 * dmg_taken;
+            
+            // Delta-Distance Reward: Reward for getting closer
+            const currDist = Math.abs(this.player.x - this.opponent.x) / this.WIDTH;
+            
+            // Note: Since MainScene update happens once per frame
+            if (this.lastDist !== undefined) {
+                reward += (this.lastDist - currDist) * 10.0;
+            }
+            this.lastDist = currDist;
+
+            // Efficiency penalty
+            reward -= 0.01;
 
             // Store experience
             if (this.lastAIAction !== undefined) {
@@ -594,14 +618,21 @@ export default class MainScene extends Phaser.Scene {
         const dx = (this.player.x - this.opponent.x) / this.WIDTH;
         const dy = (this.player.y - this.opponent.y) / this.HEIGHT;
         
+        // CONVERSION: Phaser uses pixels/sec. Python model expects pixels/frame.
+        // Divide by 60 to get pixels/frame, then divide by the scale factors used in FightingGameEnv.py
+        const self_vx = (this.opponent.body.velocity.x / 60) / 10.0;
+        const self_vy = (this.opponent.body.velocity.y / 60) / 15.0;
+        const opp_vx = (this.player.body.velocity.x / 60) / 10.0;
+        const opp_vy = (this.player.body.velocity.y / 60) / 15.0;
+
         return [
             dx, dy,
             this.gameState.p2_health / 100, // Self Health (AI)
             this.gameState.p1_health / 100, // Opponent Health (Human)
-            this.opponent.body.velocity.x / 300, // Self Vel (AI) - 300 is max walk speed
-            this.opponent.body.velocity.y / 600, // 600 is jump speed
-            this.player.body.velocity.x / 300,   // Opponent Vel (Human)
-            this.player.body.velocity.y / 600,
+            self_vx,
+            self_vy,
+            opp_vx,
+            opp_vy,
             this.gameState.p2_stun > 0 ? 1 : 0,  // Self Flags
             this.gameState.p2_attack_timer > 0 ? 1 : 0,
             this.gameState.p2_blocking ? 1 : 0,

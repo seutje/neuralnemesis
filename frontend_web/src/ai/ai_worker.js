@@ -104,6 +104,18 @@ async function loadWeights() {
     });
 }
 
+// In GraphModel, weights are stored in model.weights object
+// The structure is { [name: string]: tf.Tensor[] }
+const findWeight = (name) => {
+    if (!model) return null;
+    const weightGroup = model.weights[name];
+    if (!weightGroup || weightGroup.length === 0) {
+        console.error(`AI Worker: Weight ${name} not found in model.weights`);
+        return null;
+    }
+    return weightGroup[0];
+};
+
 async function init() {
     try {
         console.log("AI Worker: Starting Initialization...");
@@ -112,17 +124,6 @@ async function init() {
         
         model = await tf.loadGraphModel('/assets/model/model.json');
         
-        // In GraphModel, weights are stored in model.weights object
-        // The structure is { [name: string]: tf.Tensor[] }
-        const findWeight = (name) => {
-            const weightGroup = model.weights[name];
-            if (!weightGroup || weightGroup.length === 0) {
-                console.error(`AI Worker: Weight ${name} not found in model.weights`);
-                return null;
-            }
-            return weightGroup[0];
-        };
-
         // Try to load from IndexedDB first
         const saved = await loadWeights();
         if (saved) {
@@ -132,6 +133,11 @@ async function init() {
             criticWeights = tf.variable(tf.tensor2d(saved.criticWeights));
             criticBias = tf.variable(tf.tensor1d(saved.criticBias));
         } else {
+            // Map weight indices from model.json (converted SB3 PPO)
+            // unknown_12: Policy/Actor Weights [64, 9]
+            // unknown_16: Policy/Actor Bias [9]
+            // unknown_11: Value/Critic Weights [64, 1]
+            // unknown_15: Value/Critic Bias [1]
             const w12 = findWeight('unknown_12');
             const w16 = findWeight('unknown_16');
             const w11 = findWeight('unknown_11');
@@ -200,6 +206,29 @@ self.onmessage = async (e) => {
     if (type === 'set_difficulty') {
         difficulty = payload;
         console.log(`AI Worker: Difficulty set to ${difficulty}`);
+        return;
+    }
+
+    if (type === 'reset_weights') {
+        console.log("AI Worker: Resetting weights to base model...");
+        try {
+            const w12 = findWeight('unknown_12');
+            const w16 = findWeight('unknown_16');
+            const w11 = findWeight('unknown_11');
+            const w15 = findWeight('unknown_15');
+            
+            actorWeights.assign(w12);
+            actorBias.assign(w16);
+            criticWeights.assign(w11);
+            criticBias.assign(w15);
+            
+            const request = indexedDB.deleteDatabase(DB_NAME);
+            request.onsuccess = () => console.log("AI Worker: IndexedDB cleared");
+            
+            self.postMessage({ type: 'weights_reset' });
+        } catch (e) {
+            console.error("AI Worker: Reset failed", e);
+        }
         return;
     }
 
