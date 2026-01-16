@@ -1,7 +1,7 @@
 import * as tf from '@tensorflow/tfjs';
 
 const N_STACK = 4;
-const FEATURES = 14;
+const FEATURES = 16;
 
 class ReplayBuffer {
     constructor(maxSize = 5000) {

@@ -14,12 +14,17 @@ export default class MainScene extends Phaser.Scene {
             p2_blocking: false,
         };
         this.MAX_HEALTH = 100;
-        this.ATTACK_DURATION = 20;
+        this.LIGHT_ATTACK_DUR = 20;
+        this.HEAVY_ATTACK_DUR = 35;
+        this.SPECIAL_ATTACK_DUR = 55;
+        
         this.STUN_DURATION = 30;
         this.ATTACK_REACH = 90;
         this.WIDTH = 800;
         this.HEIGHT = 600;
         this.GROUND_Y = 500;
+        this.PLAYER_HEIGHT = 100;
+        this.CROUCH_HEIGHT = 50;
         this.isAiReady = false;
         this.waitingForPrediction = false;
         this.roundEnded = false;
@@ -52,7 +57,7 @@ export default class MainScene extends Phaser.Scene {
         
         // Inputs
         this.cursors = this.input.keyboard.createCursorKeys();
-        this.keys = this.input.keyboard.addKeys('A,D,W,S,J,K,L');
+        this.keys = this.input.keyboard.addKeys('A,D,W,S,Q,Z,J,K,L,SPACE');
 
         // AI Setup
         this.setupAI();
@@ -152,26 +157,52 @@ export default class MainScene extends Phaser.Scene {
         }
 
         this.gameState.p1_blocking = false;
+        this.gameState.p1_crouching = false;
         let vx = 0;
 
-        if (this.cursors.left.isDown || this.keys.A.isDown) vx = -300;
+        if (this.cursors.left.isDown || this.keys.A.isDown || this.keys.Q.isDown) vx = -300;
         else if (this.cursors.right.isDown || this.keys.D.isDown) vx = 300;
 
-        if ((this.cursors.up.isDown || this.keys.W.isDown) && this.player.body.blocked.down) {
+        if ((this.cursors.up.isDown || this.keys.W.isDown || this.keys.Z.isDown) && this.player.body.blocked.down) {
             this.player.body.setVelocityY(-600);
         }
 
-        if (this.keys.S.isDown) {
+        if (this.keys.S.isDown || this.cursors.down.isDown) {
+            vx = 0;
+            this.gameState.p1_crouching = true;
+        }
+
+        if (this.keys.SPACE.isDown) {
             vx = 0;
             this.gameState.p1_blocking = true;
         }
 
         if (Phaser.Input.Keyboard.JustDown(this.keys.J)) {
-            this.gameState.p1_attacking = this.ATTACK_DURATION;
+            this.gameState.p1_attacking = 1; // Light
+            this.gameState.p1_attack_timer = this.LIGHT_ATTACK_DUR;
+            vx = 0;
+        } else if (Phaser.Input.Keyboard.JustDown(this.keys.K)) {
+            this.gameState.p1_attacking = 2; // Heavy
+            this.gameState.p1_attack_timer = this.HEAVY_ATTACK_DUR;
+            vx = 0;
+        } else if (Phaser.Input.Keyboard.JustDown(this.keys.L)) {
+            this.gameState.p1_attacking = 3; // Special
+            this.gameState.p1_attack_timer = this.SPECIAL_ATTACK_DUR;
             vx = 0;
         }
 
         this.player.body.setVelocityX(vx);
+        
+        // Handle Visual Crouching
+        if (this.gameState.p1_crouching) {
+            this.player.setDisplaySize(50, this.CROUCH_HEIGHT);
+            this.player.body.setSize(50, this.CROUCH_HEIGHT);
+            this.player.body.setOffset(0, this.PLAYER_HEIGHT - this.CROUCH_HEIGHT);
+        } else {
+            this.player.setDisplaySize(50, this.PLAYER_HEIGHT);
+            this.player.body.setSize(50, this.PLAYER_HEIGHT);
+            this.player.body.setOffset(0, 0);
+        }
     }
 
     executeAIAction(action) {
@@ -180,6 +211,7 @@ export default class MainScene extends Phaser.Scene {
 
         this.lastAIAction = action;
         this.gameState.p2_blocking = false;
+        this.gameState.p2_crouching = false;
         let vx = 0;
 
         if (action === 1) vx = -300; // Left
@@ -189,17 +221,42 @@ export default class MainScene extends Phaser.Scene {
             this.opponent.body.setVelocityY(-600); // Jump
         }
 
+        if (action === 4) { // Crouch
+            vx = 0;
+            this.gameState.p2_crouching = true;
+        }
+
         if (action === 5) { // Block
             vx = 0;
             this.gameState.p2_blocking = true;
         }
 
-        if (action >= 6) { // Attacks
-            this.gameState.p2_attacking = this.ATTACK_DURATION;
+        if (action === 6) { // Light Attack
+            this.gameState.p2_attacking = 1;
+            this.gameState.p2_attack_timer = this.LIGHT_ATTACK_DUR;
+            vx = 0;
+        } else if (action === 7) { // Heavy Attack
+            this.gameState.p2_attacking = 2;
+            this.gameState.p2_attack_timer = this.HEAVY_ATTACK_DUR;
+            vx = 0;
+        } else if (action === 8) { // Special Attack
+            this.gameState.p2_attacking = 3;
+            this.gameState.p2_attack_timer = this.SPECIAL_ATTACK_DUR;
             vx = 0;
         }
 
         this.opponent.body.setVelocityX(vx);
+
+        // Handle Visual Crouching for AI
+        if (this.gameState.p2_crouching) {
+            this.opponent.setDisplaySize(50, this.CROUCH_HEIGHT);
+            this.opponent.body.setSize(50, this.CROUCH_HEIGHT);
+            this.opponent.body.setOffset(0, this.PLAYER_HEIGHT - this.CROUCH_HEIGHT);
+        } else {
+            this.opponent.setDisplaySize(50, this.PLAYER_HEIGHT);
+            this.opponent.body.setSize(50, this.PLAYER_HEIGHT);
+            this.opponent.body.setOffset(0, 0);
+        }
     }
 
     update() {
@@ -250,14 +307,30 @@ export default class MainScene extends Phaser.Scene {
         // Update timers
         if (this.gameState.p1_stun > 0) this.gameState.p1_stun--;
         if (this.gameState.p2_stun > 0) this.gameState.p2_stun--;
-        if (this.gameState.p1_attacking > 0) this.gameState.p1_attacking--;
-        if (this.gameState.p2_attacking > 0) this.gameState.p2_attacking--;
+        
+        if (this.gameState.p1_attack_timer > 0) {
+            this.gameState.p1_attack_timer--;
+            if (this.gameState.p1_attack_timer === 0) this.gameState.p1_attacking = 0;
+        }
+        if (this.gameState.p2_attack_timer > 0) {
+            this.gameState.p2_attack_timer--;
+            if (this.gameState.p2_attack_timer === 0) this.gameState.p2_attacking = 0;
+        }
 
         // Visual feedback for states
         this.player.setAlpha(this.gameState.p1_stun > 0 ? 0.5 : 1);
         this.opponent.setAlpha(this.gameState.p2_stun > 0 ? 0.5 : 1);
-        this.player.setFillStyle(this.gameState.p1_attacking > 0 ? 0xffffff : 0x0088ff);
-        this.opponent.setFillStyle(this.gameState.p2_attacking > 0 ? 0xffffff : 0xff4444);
+        
+        // Attack colors
+        if (this.gameState.p1_attacking === 1) this.player.setFillStyle(0xffffff);
+        else if (this.gameState.p1_attacking === 2) this.player.setFillStyle(0xffff00);
+        else if (this.gameState.p1_attacking === 3) this.player.setFillStyle(0xff00ff);
+        else this.player.setFillStyle(0x0088ff);
+
+        if (this.gameState.p2_attacking === 1) this.opponent.setFillStyle(0xffffff);
+        else if (this.gameState.p2_attacking === 2) this.opponent.setFillStyle(0xffff00);
+        else if (this.gameState.p2_attacking === 3) this.opponent.setFillStyle(0xff00ff);
+        else this.opponent.setFillStyle(0xff4444);
 
         const currentState = this.captureGameState();
         
@@ -291,34 +364,57 @@ export default class MainScene extends Phaser.Scene {
     }
 
     resolveCombat() {
-        const p1_rect = { x: this.player.x - 25, y: this.player.y - 50, w: 50, h: 100 };
-        const p2_rect = { x: this.opponent.x - 25, y: this.opponent.y - 50, w: 50, h: 100 };
+        const p1_h = this.gameState.p1_crouching ? this.CROUCH_HEIGHT : this.PLAYER_HEIGHT;
+        const p2_h = this.gameState.p2_crouching ? this.CROUCH_HEIGHT : this.PLAYER_HEIGHT;
+
+        const p1_rect = { x: this.player.x - 25, y: this.player.y - (p1_h/2), w: 50, h: p1_h };
+        const p2_rect = { x: this.opponent.x - 25, y: this.opponent.y - (p2_h/2), w: 50, h: p2_h };
 
         // P1 Attacks
-        if (this.gameState.p1_attacking > 0) {
+        if (this.gameState.p1_attack_timer > 0) {
+            let reach = this.ATTACK_REACH;
+            if (this.gameState.p1_attacking === 2) reach += 20;
+            if (this.gameState.p1_attacking === 3) reach += 50;
+
             let reach_rect = { ...p1_rect };
-            if (this.player.x < this.opponent.x) reach_rect.w += this.ATTACK_REACH;
-            else { reach_rect.x -= this.ATTACK_REACH; reach_rect.w += this.ATTACK_REACH; }
+            if (this.player.x < this.opponent.x) reach_rect.w += reach;
+            else { reach_rect.x -= reach; reach_rect.w += reach; }
 
             if (this.checkOverlap(reach_rect, p2_rect)) {
                 if (!this.gameState.p2_blocking) {
-                    this.gameState.p2_health -= 1.0;
-                    this.gameState.p2_stun = this.STUN_DURATION;
+                    let damage = 1.0;
+                    let stun = this.STUN_DURATION;
+                    if (this.gameState.p1_attacking === 2) { damage = 2.5; stun += 15; }
+                    if (this.gameState.p1_attacking === 3) { damage = 5.0; stun += 40; }
+
+                    this.gameState.p2_health -= damage;
+                    this.gameState.p2_stun = stun;
+                    this.gameState.p2_attack_timer = 0;
                     this.gameState.p2_attacking = 0; // Interrupt
                 }
             }
         }
 
         // P2 Attacks
-        if (this.gameState.p2_attacking > 0) {
+        if (this.gameState.p2_attack_timer > 0) {
+            let reach = this.ATTACK_REACH;
+            if (this.gameState.p2_attacking === 2) reach += 20;
+            if (this.gameState.p2_attacking === 3) reach += 50;
+
             let reach_rect = { ...p2_rect };
-            if (this.opponent.x < this.player.x) reach_rect.w += this.ATTACK_REACH;
-            else { reach_rect.x -= this.ATTACK_REACH; reach_rect.w += this.ATTACK_REACH; }
+            if (this.opponent.x < this.player.x) reach_rect.w += reach;
+            else { reach_rect.x -= reach; reach_rect.w += reach; }
 
             if (this.checkOverlap(reach_rect, p1_rect)) {
                 if (!this.gameState.p1_blocking) {
-                    this.gameState.p1_health -= 1.0;
-                    this.gameState.p1_stun = this.STUN_DURATION;
+                    let damage = 1.0;
+                    let stun = this.STUN_DURATION;
+                    if (this.gameState.p2_attacking === 2) { damage = 2.5; stun += 15; }
+                    if (this.gameState.p2_attacking === 3) { damage = 5.0; stun += 40; }
+
+                    this.gameState.p1_health -= damage;
+                    this.gameState.p1_stun = stun;
+                    this.gameState.p1_attack_timer = 0;
                     this.gameState.p1_attacking = 0; // Interrupt
                 }
             }
@@ -333,15 +429,25 @@ export default class MainScene extends Phaser.Scene {
         this.gameState.p1_stun = 0;
         this.gameState.p2_stun = 0;
         this.gameState.p1_attacking = 0;
+        this.gameState.p1_attack_timer = 0;
         this.gameState.p2_attacking = 0;
+        this.gameState.p2_attack_timer = 0;
         this.gameState.p1_blocking = false;
         this.gameState.p2_blocking = false;
+        this.gameState.p1_crouching = false;
+        this.gameState.p2_crouching = false;
         
         this.player.setPosition(200, 450);
         this.opponent.setPosition(600, 450);
         this.player.body.setVelocity(0, 0);
         this.opponent.body.setVelocity(0, 0);
         
+        // Reset Visuals
+        this.player.setDisplaySize(50, this.PLAYER_HEIGHT);
+        this.player.body.setSize(50, this.PLAYER_HEIGHT);
+        this.opponent.setDisplaySize(50, this.PLAYER_HEIGHT);
+        this.opponent.body.setSize(50, this.PLAYER_HEIGHT);
+
         this.statusText.setText('');
         this.roundEnded = false;
         this.updateHealthBars();
@@ -370,11 +476,13 @@ export default class MainScene extends Phaser.Scene {
             this.player.body.velocity.x / 300,   // Opponent Vel (Human)
             this.player.body.velocity.y / 500,
             this.gameState.p2_stun > 0 ? 1 : 0,  // Self Flags
-            this.gameState.p2_attacking > 0 ? 1 : 0,
+            this.gameState.p2_attack_timer > 0 ? 1 : 0,
             this.gameState.p2_blocking ? 1 : 0,
+            this.gameState.p2_crouching ? 1 : 0,
             this.gameState.p1_stun > 0 ? 1 : 0,  // Opponent Flags
-            this.gameState.p1_attacking > 0 ? 1 : 0,
-            this.gameState.p1_blocking ? 1 : 0
+            this.gameState.p1_attack_timer > 0 ? 1 : 0,
+            this.gameState.p1_blocking ? 1 : 0,
+            this.gameState.p1_crouching ? 1 : 0
         ];
     }
 }

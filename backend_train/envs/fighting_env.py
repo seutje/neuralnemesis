@@ -11,12 +11,12 @@ class FightingGameEnv(gym.Env):
         # Action Space: 0: Idle, 1: Left, 2: Right, 3: Jump, 4: Crouch, 5: Block, 6: Light_Attack, 7: Heavy_Attack, 8: Special
         self.action_space = spaces.Discrete(9)
 
-        # Observation Space (14 features):
+        # Observation Space (16 features):
         # dx, dy, h_self, h_opp, vx_self, vy_self, vx_opp, vy_opp, 
-        # self_stunned, self_attacking, self_blocking, 
-        # opp_stunned, opp_attacking, opp_blocking
+        # self_stunned, self_attacking, self_blocking, self_crouching,
+        # opp_stunned, opp_attacking, opp_blocking, opp_crouching
         # Normalized to [0, 1] or [-1, 1] where appropriate
-        self.observation_space = spaces.Box(low=-1.0, high=1.0, shape=(14,), dtype=np.float32)
+        self.observation_space = spaces.Box(low=-1.0, high=1.0, shape=(16,), dtype=np.float32)
 
         # Game constants
         self.WIDTH = 800
@@ -24,6 +24,7 @@ class FightingGameEnv(gym.Env):
         self.GROUND_Y = 500
         self.PLAYER_WIDTH = 50
         self.PLAYER_HEIGHT = 100
+        self.CROUCH_HEIGHT = 50
         self.WALK_SPEED = 5
         self.JUMP_FORCE = -15
         self.GRAVITY = 0.8
@@ -32,7 +33,10 @@ class FightingGameEnv(gym.Env):
         self.MAX_STEPS = 2000 # 2000 frames is about 33 seconds at 60fps
         
         # Frame data (simplified)
-        self.ATTACK_DURATION = 20
+        self.LIGHT_ATTACK_DUR = 20
+        self.HEAVY_ATTACK_DUR = 35
+        self.SPECIAL_ATTACK_DUR = 55
+        
         self.STUN_DURATION = 30
         self.ATTACK_REACH = 90 # Increased reach to ensure hits land from a distance
         
@@ -53,8 +57,10 @@ class FightingGameEnv(gym.Env):
         self.p1_vy = 0
         self.p1_health = self.MAX_HEALTH
         self.p1_stun = 0
-        self.p1_attacking = 0
+        self.p1_attacking = 0 # 0: none, 1: light, 2: heavy, 3: special
+        self.p1_attack_timer = 0
         self.p1_blocking = False
+        self.p1_crouching = False
         
         # Player 2 (Opponent) - Now starts on the LEFT
         self.p2_x = 200
@@ -63,8 +69,10 @@ class FightingGameEnv(gym.Env):
         self.p2_vy = 0
         self.p2_health = self.MAX_HEALTH
         self.p2_stun = 0
-        self.p2_attacking = 0
+        self.p2_attacking = 0 # 0: none, 1: light, 2: heavy, 3: special
+        self.p2_attack_timer = 0
         self.p2_blocking = False
+        self.p2_crouching = False
         
         return self._get_obs(), {}
 
@@ -81,11 +89,13 @@ class FightingGameEnv(gym.Env):
             self.p2_vx / 10.0,
             self.p2_vy / 15.0,
             1.0 if self.p1_stun > 0 else 0.0,
-            1.0 if self.p1_attacking > 0 else 0.0,
+            1.0 if self.p1_attack_timer > 0 else 0.0,
             1.0 if self.p1_blocking else 0.0,
+            1.0 if self.p1_crouching else 0.0,
             1.0 if self.p2_stun > 0 else 0.0,
-            1.0 if self.p2_attacking > 0 else 0.0,
-            1.0 if self.p2_blocking else 0.0
+            1.0 if self.p2_attack_timer > 0 else 0.0,
+            1.0 if self.p2_blocking else 0.0,
+            1.0 if self.p2_crouching else 0.0
         ], dtype=np.float32)
         return obs
 
@@ -136,23 +146,30 @@ class FightingGameEnv(gym.Env):
         if player_num == 1:
             stun = self.p1_stun
             attacking = self.p1_attacking
+            attack_timer = self.p1_attack_timer
             vx = self.p1_vx
             vy = self.p1_vy
             blocking = self.p1_blocking
+            crouching = self.p1_crouching
         else:
             stun = self.p2_stun
             attacking = self.p2_attacking
+            attack_timer = self.p2_attack_timer
             vx = self.p2_vx
             vy = self.p2_vy
             blocking = self.p2_blocking
+            crouching = self.p2_crouching
 
         # Can't move if stunned or attacking
         if stun > 0:
             vx = 0
-        elif attacking > 0:
-            pass # Keep momentum but can't change it easily? For now, let's say frozen in place for simplicity
+            blocking = False
+            crouching = False
+        elif attack_timer > 0:
+            pass # Keep momentum or frozen? For now frozen
         else:
             blocking = False
+            crouching = False
             if action == 1: # Left
                 vx = -self.WALK_SPEED
             elif action == 2: # Right
@@ -166,17 +183,21 @@ class FightingGameEnv(gym.Env):
                         self.p2_vy = self.JUMP_FORCE
             elif action == 4: # Crouch
                 vx = 0
+                crouching = True
             elif action == 5: # Block
                 vx = 0
                 blocking = True
             elif action == 6: # Light Attack
-                attacking = self.ATTACK_DURATION
+                attacking = 1
+                attack_timer = self.LIGHT_ATTACK_DUR
                 vx = 0
             elif action == 7: # Heavy Attack
-                attacking = self.ATTACK_DURATION + 10
+                attacking = 2
+                attack_timer = self.HEAVY_ATTACK_DUR
                 vx = 0
             elif action == 8: # Special
-                attacking = self.ATTACK_DURATION + 20
+                attacking = 3
+                attack_timer = self.SPECIAL_ATTACK_DUR
                 vx = 0
             else: # Idle
                 vx = 0
@@ -184,32 +205,42 @@ class FightingGameEnv(gym.Env):
         if player_num == 1:
             self.p1_vx = vx
             self.p1_stun = max(0, stun - 1)
-            self.p1_attacking = max(0, attacking - 1)
+            self.p1_attacking = attacking if attack_timer > 0 else 0
+            self.p1_attack_timer = max(0, attack_timer - 1)
             self.p1_blocking = blocking
+            self.p1_crouching = crouching
         else:
             self.p2_vx = vx
             self.p2_stun = max(0, stun - 1)
-            self.p2_attacking = max(0, attacking - 1)
+            self.p2_attacking = attacking if attack_timer > 0 else 0
+            self.p2_attack_timer = max(0, attack_timer - 1)
             self.p2_blocking = blocking
+            self.p2_crouching = crouching
 
     def _apply_physics(self, player_num):
         if player_num == 1:
+            h = self.CROUCH_HEIGHT if self.p1_crouching else self.PLAYER_HEIGHT
             self.p1_x += self.p1_vx
             self.p1_y += self.p1_vy
-            if self.p1_y < self.GROUND_Y - self.PLAYER_HEIGHT:
+            
+            ground_y = self.GROUND_Y - h
+            if self.p1_y < ground_y:
                 self.p1_vy += self.GRAVITY
             else:
-                self.p1_y = self.GROUND_Y - self.PLAYER_HEIGHT
+                self.p1_y = ground_y
                 self.p1_vy = 0
             # Boundary checks
             self.p1_x = max(0, min(self.WIDTH - self.PLAYER_WIDTH, self.p1_x))
         else:
+            h = self.CROUCH_HEIGHT if self.p2_crouching else self.PLAYER_HEIGHT
             self.p2_x += self.p2_vx
             self.p2_y += self.p2_vy
-            if self.p2_y < self.GROUND_Y - self.PLAYER_HEIGHT:
+            
+            ground_y = self.GROUND_Y - h
+            if self.p2_y < ground_y:
                 self.p2_vy += self.GRAVITY
             else:
-                self.p2_y = self.GROUND_Y - self.PLAYER_HEIGHT
+                self.p2_y = ground_y
                 self.p2_vy = 0
             # Boundary checks
             self.p2_x = max(0, min(self.WIDTH - self.PLAYER_WIDTH, self.p2_x))
@@ -219,46 +250,76 @@ class FightingGameEnv(gym.Env):
         h_opp_prev = self.p2_health
         h_self_prev = self.p1_health
         
+        # Current heights
+        p1_h = self.CROUCH_HEIGHT if self.p1_crouching else self.PLAYER_HEIGHT
+        p2_h = self.CROUCH_HEIGHT if self.p2_crouching else self.PLAYER_HEIGHT
+        
         # Simple hitbox check
-        p1_rect = [self.p1_x, self.p1_y, self.PLAYER_WIDTH, self.PLAYER_HEIGHT]
-        p2_rect = [self.p2_x, self.p2_y, self.PLAYER_WIDTH, self.PLAYER_HEIGHT]
+        p1_rect = [self.p1_x, self.p1_y, self.PLAYER_WIDTH, p1_h]
+        p2_rect = [self.p2_x, self.p2_y, self.PLAYER_WIDTH, p2_h]
         
         # Extend hitboxes based on reach if attacking
         p1_attack_rect = p1_rect.copy()
-        if self.p1_attacking > 0:
+        if self.p1_attack_timer > 0:
+            reach = self.ATTACK_REACH
+            if self.p1_attacking == 2: reach += 20 # Heavy reach
+            if self.p1_attacking == 3: reach += 50 # Special reach
+            
             if self.p1_x < self.p2_x: # Facing right
-                p1_attack_rect[2] += self.ATTACK_REACH
+                p1_attack_rect[2] += reach
             else: # Facing left
-                p1_attack_rect[0] -= self.ATTACK_REACH
-                p1_attack_rect[2] += self.ATTACK_REACH
+                p1_attack_rect[0] -= reach
+                p1_attack_rect[2] += reach
 
         p2_attack_rect = p2_rect.copy()
-        if self.p2_attacking > 0:
+        if self.p2_attack_timer > 0:
+            reach = self.ATTACK_REACH
+            if self.p2_attacking == 2: reach += 20
+            if self.p2_attacking == 3: reach += 50
+
             if self.p2_x < self.p1_x: # Facing right
-                p2_attack_rect[2] += self.ATTACK_REACH
+                p2_attack_rect[2] += reach
             else: # Facing left
-                p2_attack_rect[0] -= self.ATTACK_REACH
-                p2_attack_rect[2] += self.ATTACK_REACH
+                p2_attack_rect[0] -= reach
+                p2_attack_rect[2] += reach
 
         def check_collision(r1, r2):
             return r1[0] < r2[0] + r2[2] and r1[0] + r1[2] > r2[0] and \
                    r1[1] < r2[1] + r2[3] and r1[1] + r1[3] > r2[1]
 
         # P1 Attacks P2
-        if self.p1_attacking > 0 and check_collision(p1_attack_rect, p2_rect):
+        if self.p1_attack_timer > 0 and check_collision(p1_attack_rect, p2_rect):
             if not self.p2_blocking:
                 damage = 2
+                stun = self.STUN_DURATION
+                if self.p1_attacking == 2:
+                    damage = 5
+                    stun += 15
+                elif self.p1_attacking == 3:
+                    damage = 10
+                    stun += 40
+                
                 self.p2_health -= damage
-                self.p2_stun = self.STUN_DURATION
-                self.p2_attacking = 0 # INTERRUPT: P2 stops attacking if hit
+                self.p2_stun = stun
+                self.p2_attack_timer = 0 # INTERRUPT
+                self.p2_attacking = 0
                 
         # P2 Attacks P1
-        if self.p2_attacking > 0 and check_collision(p2_attack_rect, p1_rect):
+        if self.p2_attack_timer > 0 and check_collision(p2_attack_rect, p1_rect):
             if not self.p1_blocking:
                 damage = 2
+                stun = self.STUN_DURATION
+                if self.p2_attacking == 2:
+                    damage = 5
+                    stun += 15
+                elif self.p2_attacking == 3:
+                    damage = 10
+                    stun += 40
+
                 self.p1_health -= damage
-                self.p1_stun = self.STUN_DURATION
-                self.p1_attacking = 0 # INTERRUPT: P1 stops attacking if hit
+                self.p1_stun = stun
+                self.p1_attack_timer = 0 # INTERRUPT
+                self.p1_attacking = 0
 
         # Reward Function - Recalibrated for Aggression
         reward += 10.0 * (h_opp_prev - self.p2_health)

@@ -41,8 +41,8 @@ def export_model(model_path, onnx_path):
     onnx_model.to("cpu")
     onnx_model.eval()
     
-    # Input shape: (1, 14 * 4) = (1, 56)
-    dummy_input = th.randn(1, 56).to("cpu")
+    # Input shape: (1, 16 * 4) = (1, 64)
+    dummy_input = th.randn(1, 64).to("cpu")
     
     th.onnx.export(
         onnx_model,
