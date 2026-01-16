@@ -115,7 +115,7 @@ export default class MainScene extends Phaser.Scene {
     }
 
     updateHealthBars() {
-        const y = 100; // Lowered to clear HTML header
+        const y = 50; // Moved up by 50px to avoid overlap
         this.p1HealthBar.clear();
         // P1 Health (Blue/Cyan)
         this.p1HealthBar.fillStyle(0x000000, 0.5);
@@ -126,8 +126,17 @@ export default class MainScene extends Phaser.Scene {
         this.p1HealthBar.strokeRect(50, y, 300, 30);
         
         // Labels
-        if (!this.p1Label) this.p1Label = this.add.text(50, y - 20, 'PLAYER', { fontSize: '14px', fill: '#00f2ff', fontWeight: 'bold', fontFamily: 'Outfit' });
-        if (!this.p2Label) this.p2Label = this.add.text(750, y - 20, 'NEMESIS AI', { fontSize: '14px', fill: '#ff00c8', fontWeight: 'bold', fontFamily: 'Outfit' }).setOrigin(1, 0);
+        if (!this.p1Label) {
+            this.p1Label = this.add.text(50, y - 20, 'PLAYER', { fontSize: '14px', fill: '#00f2ff', fontWeight: 'bold', fontFamily: 'Outfit' });
+        } else {
+            this.p1Label.setY(y - 20);
+        }
+
+        if (!this.p2Label) {
+            this.p2Label = this.add.text(750, y - 20, 'NEMESIS AI', { fontSize: '14px', fill: '#ff00c8', fontWeight: 'bold', fontFamily: 'Outfit' }).setOrigin(1, 0);
+        } else {
+            this.p2Label.setY(y - 20);
+        }
 
         this.p2HealthBar.clear();
         // P2 Health (Magenta/Purple)
