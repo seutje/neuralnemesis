@@ -82,44 +82,62 @@ export default class MainScene extends Phaser.Scene {
         this.p2HealthBar = this.add.graphics();
         this.updateHealthBars();
 
-        this.statusText = this.add.text(400, 100, '', { fontSize: '32px', fill: '#fff', fontStyle: 'bold' }).setOrigin(0.5);
+        this.statusText = this.add.text(400, 300, '', { 
+            fontSize: '64px', 
+            fill: '#fff', 
+            fontStyle: '900',
+            fontFamily: 'Outfit',
+            stroke: '#000',
+            strokeThickness: 8
+        }).setOrigin(0.5);
         
-        // AI Debug UI
-        this.debugContainer = this.add.container(20, 100);
-        const bg = this.add.rectangle(0, 0, 200, 240, 0x000000, 0.7).setOrigin(0);
-        this.confidenceText = this.add.text(10, 10, 'AI Confidence: ---', { fontSize: '14px', fill: '#0ff' });
-        this.intentText = this.add.text(10, 30, 'Intent: ---', { fontSize: '14px', fill: '#f0f' });
-        this.bufferText = this.add.text(10, 50, 'Memories: 0', { fontSize: '14px', fill: '#ff0' });
+        // AI Debug UI - Moved to right side
+        this.debugContainer = this.add.container(580, 120);
+        const bg = this.add.rectangle(0, 0, 200, 240, 0x000000, 0.5).setOrigin(0);
+        bg.setStrokeStyle(1, 0x00f2ff, 0.3);
+
+        this.confidenceText = this.add.text(10, 10, 'AI CONFIDENCE: ---', { fontSize: '12px', fill: '#00f2ff', fontFamily: 'Outfit', fontWeight: 'bold' });
+        this.intentText = this.add.text(10, 30, 'INTENT: ---', { fontSize: '12px', fill: '#7000ff', fontFamily: 'Outfit', fontWeight: 'bold' });
+        this.bufferText = this.add.text(10, 50, 'MEMORIES: 0', { fontSize: '12px', fill: '#ff00c8', fontFamily: 'Outfit', fontWeight: 'bold' });
         
         // Probability bars
         this.probBars = [];
-        const actions = ['Idle', 'Left', 'Right', 'Jump', 'Crouch', 'Block', 'Light', 'Heavy', 'Spec'];
+        const actions = ['IDLE', 'LEFT', 'RIGHT', 'JUMP', 'CROUCH', 'BLOCK', 'LIGHT', 'HEAVY', 'SPECIAL'];
         for (let i = 0; i < 9; i++) {
-            const label = this.add.text(10, 75 + i * 18, actions[i], { fontSize: '10px', fill: '#aaa' });
-            const bar = this.add.rectangle(50, 80 + i * 18, 0, 10, 0x00ff00).setOrigin(0, 0.5);
+            const label = this.add.text(10, 75 + i * 18, actions[i], { fontSize: '10px', fill: '#fff', fontFamily: 'Outfit' });
+            const barBg = this.add.rectangle(60, 80 + i * 18, 120, 8, 0xffffff, 0.1).setOrigin(0, 0.5);
+            const bar = this.add.rectangle(60, 80 + i * 18, 0, 8, 0x00f2ff).setOrigin(0, 0.5);
             this.probBars.push(bar);
-            this.debugContainer.add([label, bar]);
+            this.debugContainer.add([label, barBg, bar]);
         }
         
         this.debugContainer.add([bg, this.confidenceText, this.intentText, this.bufferText]);
     }
 
     updateHealthBars() {
+        const y = 100; // Lowered to clear HTML header
         this.p1HealthBar.clear();
-        this.p1HealthBar.fillStyle(0xff0000, 0.3); // Background
-        this.p1HealthBar.fillRect(50, 50, 200, 20);
-        this.p1HealthBar.fillStyle(0x00ff00, 1); // Foreground
-        this.p1HealthBar.fillRect(50, 50, Math.max(0, this.gameState.p1_health) * 2, 20);
-        this.p1HealthBar.lineStyle(2, 0xffffff);
-        this.p1HealthBar.strokeRect(50, 50, 200, 20);
+        // P1 Health (Blue/Cyan)
+        this.p1HealthBar.fillStyle(0x000000, 0.5);
+        this.p1HealthBar.fillRect(50, y, 300, 30);
+        this.p1HealthBar.fillStyle(0x00f2ff, 1);
+        this.p1HealthBar.fillRect(50, y, Math.max(0, this.gameState.p1_health) * 3, 30);
+        this.p1HealthBar.lineStyle(2, 0x00f2ff, 0.5);
+        this.p1HealthBar.strokeRect(50, y, 300, 30);
+        
+        // Labels
+        if (!this.p1Label) this.p1Label = this.add.text(50, y - 20, 'PLAYER', { fontSize: '14px', fill: '#00f2ff', fontWeight: 'bold', fontFamily: 'Outfit' });
+        if (!this.p2Label) this.p2Label = this.add.text(750, y - 20, 'NEMESIS AI', { fontSize: '14px', fill: '#ff00c8', fontWeight: 'bold', fontFamily: 'Outfit' }).setOrigin(1, 0);
 
         this.p2HealthBar.clear();
-        this.p2HealthBar.fillStyle(0xff0000, 0.3);
-        this.p2HealthBar.fillRect(550, 50, 200, 20);
-        this.p2HealthBar.fillStyle(0x00ff00, 1);
-        this.p2HealthBar.fillRect(550, 50, Math.max(0, this.gameState.p2_health) * 2, 20);
-        this.p2HealthBar.lineStyle(2, 0xffffff);
-        this.p2HealthBar.strokeRect(550, 50, 200, 20);
+        // P2 Health (Magenta/Purple)
+        this.p2HealthBar.fillStyle(0x000000, 0.5);
+        this.p2HealthBar.fillRect(450, y, 300, 30);
+        this.p2HealthBar.fillStyle(0xff00c8, 1);
+        const p2Width = Math.max(0, this.gameState.p2_health) * 3;
+        this.p2HealthBar.fillRect(750 - p2Width, y, p2Width, 30);
+        this.p2HealthBar.lineStyle(2, 0xff00c8, 0.5);
+        this.p2HealthBar.strokeRect(450, y, 300, 30);
     }
 
     setupAI() {
@@ -131,8 +149,16 @@ export default class MainScene extends Phaser.Scene {
             if (type === 'ready') {
                 console.log("MainThread: AI Worker is READY");
                 this.isAiReady = true;
-                document.getElementById('ai-status').innerText = 'Online';
-                document.getElementById('ai-status').style.color = '#0f0';
+                const statusText = document.getElementById('ai-status');
+                const statusDot = document.getElementById('ai-status-dot');
+                if (statusText) {
+                    statusText.innerText = 'Online';
+                    statusText.style.color = '#00f2ff';
+                }
+                if (statusDot) {
+                    statusDot.style.background = '#00f2ff';
+                    statusDot.style.boxShadow = '0 0 10px #00f2ff';
+                }
             }
             
             if (type === 'action') {
@@ -147,13 +173,21 @@ export default class MainScene extends Phaser.Scene {
             }
 
             if (type === 'stats') {
-                this.bufferText.setText(`Memories: ${bufferSize}`);
+                this.bufferText.setText(`MEMORIES: ${bufferSize}`);
             }
 
             if (type === 'error') {
                 console.error("MainThread: AI Worker error", payload);
-                document.getElementById('ai-status').innerText = 'Error';
-                document.getElementById('ai-status').style.color = '#f00';
+                const statusText = document.getElementById('ai-status');
+                const statusDot = document.getElementById('ai-status-dot');
+                if (statusText) {
+                    statusText.innerText = 'Error';
+                    statusText.style.color = '#ff0055';
+                }
+                if (statusDot) {
+                    statusDot.style.background = '#ff0055';
+                    statusDot.style.boxShadow = '0 0 10px #ff0055';
+                }
             }
         };
     }
