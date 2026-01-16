@@ -598,10 +598,10 @@ export default class MainScene extends Phaser.Scene {
             dx, dy,
             this.gameState.p2_health / 100, // Self Health (AI)
             this.gameState.p1_health / 100, // Opponent Health (Human)
-            this.opponent.body.velocity.x / 300, // Self Vel (AI)
-            this.opponent.body.velocity.y / 500,
+            this.opponent.body.velocity.x / 300, // Self Vel (AI) - 300 is max walk speed
+            this.opponent.body.velocity.y / 600, // 600 is jump speed
             this.player.body.velocity.x / 300,   // Opponent Vel (Human)
-            this.player.body.velocity.y / 500,
+            this.player.body.velocity.y / 600,
             this.gameState.p2_stun > 0 ? 1 : 0,  // Self Flags
             this.gameState.p2_attack_timer > 0 ? 1 : 0,
             this.gameState.p2_blocking ? 1 : 0,
