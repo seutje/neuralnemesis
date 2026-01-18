@@ -50,7 +50,7 @@ class FightingGameEnv(gym.Env):
         self.reset()
 
     def reset(self, seed=None, options=None):
-        super().reset(seed=seed)
+        super().reset(seed=seed, options=options)
         self.current_step = 0
         
         # Bot Personality: 0: Aggressive, 1: Defensive, 2: Random, 3: Passive (Wait)
@@ -125,7 +125,7 @@ class FightingGameEnv(gym.Env):
         
         # Delta-Distance Reward: Reward for getting closer
         curr_dist = abs(self.p1_x - self.p2_x) / self.WIDTH
-        reward += (self.prev_dist - curr_dist) * 10.0 
+        reward += (self.prev_dist - curr_dist) * 20.0 
         self.prev_dist = curr_dist
 
         # Efficiency penalty
@@ -236,8 +236,8 @@ class FightingGameEnv(gym.Env):
                             if p == 1: self.p2_vx, self.p1_vx = dir * self.KNOCKBACK_VICTIM, -dir * self.KNOCKBACK_ATTACKER
                             else: self.p1_vx, self.p2_vx = dir * self.KNOCKBACK_VICTIM, -dir * self.KNOCKBACK_ATTACKER
 
-        # Combat Reward Scaling (Aggressive 3:1)
+        # Combat Reward Scaling (Balanced 2:1)
         dmg_dealt, dmg_taken = max(0, h_opp_prev - self.p2_health), max(0, h_self_prev - self.p1_health)
-        reward += 40.0 * dmg_dealt - 10.0 * dmg_taken
+        reward += 30.0 * dmg_dealt - 15.0 * dmg_taken
             
         return reward

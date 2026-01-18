@@ -19,14 +19,14 @@ def make_env(rank, seed=0):
 def train():
     # 1. Configuration
     num_cpu = 10 
-    total_timesteps = 1_000_000
+    total_timesteps = 3_000_000
     
     # 2. Setup Parallel Environments
     print(f"Initializing {num_cpu} parallel environments...")
     env = SubprocVecEnv([make_env(i) for i in range(num_cpu)])
     env = VecFrameStack(env, n_stack=4)
     # Add normalization for observations and rewards
-    env = VecNormalize(env, norm_obs=True, norm_reward=True, clip_obs=10.)
+    env = VecNormalize(env, norm_obs=True, norm_reward=False, clip_obs=10.)
     
     # 3. Setup PPO with ReLU for better TFJS compatibility
     policy_kwargs = dict(activation_fn=th.nn.ReLU)
@@ -45,7 +45,7 @@ def train():
         gamma=0.99,
         gae_lambda=0.95,
         clip_range=0.2,
-        ent_coef=0.05, # Significantly higher entropy to break the "idling" local optimum
+        ent_coef=0.01, # Lower entropy for better convergence
     )
     
     # 4. Callbacks
