@@ -162,7 +162,7 @@ export default class MainScene extends Phaser.Scene {
 
     setupAI() {
         this.aiWorker = new Worker(new URL('../ai/ai_worker.js', import.meta.url), { type: 'module' });
-        this.aiWorker.postMessage({ type: 'init' });
+        this.aiWorker.postMessage({ type: 'init', baseUrl: import.meta.env.BASE_URL });
         this.aiWorker.onmessage = (e) => {
             const { type, payload, confidence, bufferSize, probs } = e.data;
             

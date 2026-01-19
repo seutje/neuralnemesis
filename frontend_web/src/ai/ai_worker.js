@@ -116,13 +116,15 @@ const findWeight = (name) => {
     return weightGroup[0];
 };
 
-async function init() {
+async function init(baseUrl = '/') {
     try {
-        console.log("AI Worker: Starting Initialization...");
+        console.log("AI Worker: Starting Initialization with base:", baseUrl);
         await tf.setBackend('cpu');
         await tf.ready();
         
-        model = await tf.loadGraphModel('/assets/model/model.json');
+        // Ensure baseUrl ends with a slash if not empty
+        const base = baseUrl.endsWith('/') ? baseUrl : baseUrl + '/';
+        model = await tf.loadGraphModel(`${base}assets/model/model.json`);
         
         // Try to load from IndexedDB first
         const saved = await loadWeights();
@@ -159,7 +161,7 @@ async function init() {
         console.log("AI Worker: Nemesis Heads initialized as trainable variables.");
 
         console.log("AI Worker: Fetching normalization stats...");
-        const statsResponse = await fetch('/assets/model/norm_stats.json');
+        const statsResponse = await fetch(`${base}assets/model/norm_stats.json`);
         normStats = await statsResponse.json();
         console.log("AI Worker: Normalization stats loaded");
         
@@ -196,7 +198,7 @@ self.onmessage = async (e) => {
     
     if (type === 'init') {
         if (!isInitialized) {
-            await init();
+            await init(e.data.baseUrl);
         } else {
             self.postMessage({ type: 'ready' });
         }
