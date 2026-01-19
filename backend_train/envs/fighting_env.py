@@ -139,7 +139,13 @@ class FightingGameEnv(gym.Env):
             elif self.p1_health <= 0: reward -= 10.0 
         
         truncated = self.current_step >= self.MAX_STEPS
-        return self._get_obs(), reward, terminated, truncated, {}
+        info = {
+            "is_win": self.p2_health <= 0,
+            "is_loss": self.p1_health <= 0,
+            "p2_health": self.p2_health,
+            "p1_health": self.p1_health
+        }
+        return self._get_obs(), reward, terminated, truncated, info
 
     def _apply_action(self, player_num, action):
         if player_num == 1:

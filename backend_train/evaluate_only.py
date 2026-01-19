@@ -78,11 +78,9 @@ def evaluate():
                 # So we can see the progress.
                 pass
             
-            # Check for win via health instead of reward
+            # Check for win via info dict (VecEnv returns a list of info dicts)
             if done:
-                # Access the underlying environment to check health
-                p2_health = env.get_attr("p2_health")[0]
-                if p2_health <= 0:
+                if info[0].get("is_win", False):
                     wins += 1
         
         total_reward += episode_reward
