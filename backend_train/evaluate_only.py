@@ -78,10 +78,11 @@ def evaluate():
                 # So we can see the progress.
                 pass
             
-            # Check for win
+            # Check for win via health instead of reward
             if done:
-                # If unnormalized_reward is large, it means we got the +100 win bonus
-                if unnormalized_reward > 50:
+                # Access the underlying environment to check health
+                p2_health = env.get_attr("p2_health")[0]
+                if p2_health <= 0:
                     wins += 1
         
         total_reward += episode_reward

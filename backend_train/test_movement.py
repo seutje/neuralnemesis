@@ -22,7 +22,7 @@ def test_movement_reward():
     print(f"Total movement reward: {total_reward:.4f}")
     
     assert abs(env.p1_x - env.p2_x) < 600, "Player 1 should have moved closer"
-    assert total_reward > 0, f"Reward should be positive for closing distance, got {total_reward}"
+    assert total_reward > 0.2, f"Reward should be positive for closing distance, got {total_reward}"
     print("Movement reward verification successful!")
 
 if __name__ == "__main__":

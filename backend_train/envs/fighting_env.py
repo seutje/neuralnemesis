@@ -125,18 +125,18 @@ class FightingGameEnv(gym.Env):
         
         # Delta-Distance Reward: Reward for getting closer
         curr_dist = abs(self.p1_x - self.p2_x) / self.WIDTH
-        reward += (self.prev_dist - curr_dist) * 20.0 
+        reward += (self.prev_dist - curr_dist) * 5.0 
         self.prev_dist = curr_dist
 
         # Efficiency penalty
-        reward -= 0.01
+        reward -= 0.005
 
         self.current_step += 1
         terminated = False
         if self.p1_health <= 0 or self.p2_health <= 0:
             terminated = True
-            if self.p2_health <= 0: reward += 100.0 
-            elif self.p1_health <= 0: reward -= 50.0 
+            if self.p2_health <= 0: reward += 50.0 
+            elif self.p1_health <= 0: reward -= 10.0 
         
         truncated = self.current_step >= self.MAX_STEPS
         return self._get_obs(), reward, terminated, truncated, {}
@@ -227,6 +227,7 @@ class FightingGameEnv(gym.Env):
                     if (p == 1 and self.p1_x < self.p2_x) or (p == 2 and self.p2_x < self.p1_x): rect[2] += reach
                     else: rect[0] -= reach; rect[2] += reach
                     if check_collision(rect, p2_rect if p == 1 else p1_rect):
+                        if p == 1: reward += 0.2 # Increased incentive for proximity attacking
                         if not (self.p2_blocking if p == 1 else self.p1_blocking):
                             dmg = 3.0 if atk == 1 else 7.0 if atk == 2 else 12.0
                             stun = self.LIGHT_STUN if atk == 1 else self.HEAVY_STUN if atk == 2 else self.SPECIAL_STUN
@@ -236,8 +237,8 @@ class FightingGameEnv(gym.Env):
                             if p == 1: self.p2_vx, self.p1_vx = dir * self.KNOCKBACK_VICTIM, -dir * self.KNOCKBACK_ATTACKER
                             else: self.p1_vx, self.p2_vx = dir * self.KNOCKBACK_VICTIM, -dir * self.KNOCKBACK_ATTACKER
 
-        # Combat Reward Scaling (Balanced 2:1)
+        # Combat Reward Scaling (Aggressive 2:1)
         dmg_dealt, dmg_taken = max(0, h_opp_prev - self.p2_health), max(0, h_self_prev - self.p1_health)
-        reward += 30.0 * dmg_dealt - 15.0 * dmg_taken
+        reward += 2.0 * dmg_dealt - 1.0 * dmg_taken
             
         return reward
