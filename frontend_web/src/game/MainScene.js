@@ -103,7 +103,7 @@ export default class MainScene extends Phaser.Scene {
         }).setOrigin(0.5);
         
         // AI Debug UI - Moved to right side
-        this.debugContainer = this.add.container(580, 120);
+        this.debugContainer = this.add.container(550, 120);
         const bg = this.add.rectangle(0, 0, 200, 240, 0x000000, 0.5).setOrigin(0);
         bg.setStrokeStyle(1, 0x00f2ff, 0.3);
 
