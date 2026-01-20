@@ -45,6 +45,7 @@ export default class MainScene extends Phaser.Scene {
         this.waitingForPrediction = false;
         this.roundEnded = false;
         this.lastDist = 0;
+        this.trainingHideTimeoutId = null;
         
         // Humanizing AI: Action Queue
         this.aiActionQueue = [];
@@ -77,6 +78,7 @@ export default class MainScene extends Phaser.Scene {
 
         // UI
         this.createUI();
+        this.initTrainingUI();
         
         // Inputs
         this.cursors = this.input.keyboard.createCursorKeys();
@@ -131,6 +133,63 @@ export default class MainScene extends Phaser.Scene {
         }
         
         this.debugContainer.add([bg, this.confidenceText, this.intentText, this.bufferText]);
+    }
+
+    initTrainingUI() {
+        this.trainingPanel = document.getElementById('training-panel');
+        this.trainingBar = document.getElementById('training-bar');
+        this.trainingLabel = document.getElementById('training-label');
+        this.trainingPercent = document.getElementById('training-percent');
+
+        if (this.trainingPanel) {
+            this.trainingPanel.style.display = 'none';
+        }
+        if (this.trainingBar) {
+            this.trainingBar.style.width = '0%';
+        }
+        if (this.trainingLabel) {
+            this.trainingLabel.innerText = 'Training';
+        }
+        if (this.trainingPercent) {
+            this.trainingPercent.innerText = '0%';
+        }
+    }
+
+    showTrainingProgress(current, total) {
+        if (!this.trainingPanel || !this.trainingBar || !this.trainingLabel || !this.trainingPercent) {
+            return;
+        }
+
+        if (this.trainingHideTimeoutId) {
+            clearTimeout(this.trainingHideTimeoutId);
+            this.trainingHideTimeoutId = null;
+        }
+
+        const progress = total > 0 ? current / total : 0;
+        const percent = Math.max(0, Math.min(100, Math.round(progress * 100)));
+
+        this.trainingPanel.style.display = 'block';
+        this.trainingLabel.innerText = 'Training...';
+        this.trainingPercent.innerText = `${percent}%`;
+        this.trainingBar.style.width = `${percent}%`;
+    }
+
+    completeTrainingUI() {
+        if (!this.trainingPanel || !this.trainingBar || !this.trainingLabel || !this.trainingPercent) {
+            return;
+        }
+
+        this.trainingLabel.innerText = 'Training complete';
+        this.trainingPercent.innerText = '100%';
+        this.trainingBar.style.width = '100%';
+
+        this.trainingHideTimeoutId = setTimeout(() => {
+            if (this.trainingPanel) this.trainingPanel.style.display = 'none';
+            if (this.trainingBar) this.trainingBar.style.width = '0%';
+            if (this.trainingLabel) this.trainingLabel.innerText = 'Training';
+            if (this.trainingPercent) this.trainingPercent.innerText = '0%';
+            this.trainingHideTimeoutId = null;
+        }, 1200);
     }
 
     updateHealthBars() {
@@ -207,6 +266,21 @@ export default class MainScene extends Phaser.Scene {
 
             if (type === 'stats') {
                 this.bufferText.setText(`MEMORIES: ${bufferSize}`);
+            }
+
+            if (type === 'training_start') {
+                const iterations = payload?.iterations || 0;
+                this.showTrainingProgress(0, iterations);
+            }
+
+            if (type === 'training_progress') {
+                const current = payload?.current || 0;
+                const total = payload?.total || 0;
+                this.showTrainingProgress(current, total);
+            }
+
+            if (type === 'training_complete') {
+                this.completeTrainingUI();
             }
 
             if (type === 'error') {

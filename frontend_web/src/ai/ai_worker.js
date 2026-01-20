@@ -318,7 +318,8 @@ self.onmessage = async (e) => {
         console.log(`AI Worker: Starting training on ${validCount} valid experiences...`);
         
         const batchSize = Math.min(64, validCount);
-        const iterations = 5;
+        const iterations = 200;
+        self.postMessage({ type: 'training_start', payload: { iterations } });
         
         for (let i = 0; i < iterations; i++) {
             const batch = replayBuffer.sample(batchSize);
@@ -387,9 +388,15 @@ self.onmessage = async (e) => {
             adv.dispose();
             actorLatent.dispose();
             criticLatent.dispose();
+
+            self.postMessage({
+                type: 'training_progress',
+                payload: { current: i + 1, total: iterations }
+            });
         }
         
         console.log("AI Worker: Training complete.");
+        self.postMessage({ type: 'training_complete' });
         await saveWeights();
     }
 };
