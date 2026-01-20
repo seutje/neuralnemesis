@@ -81,6 +81,10 @@ export default class MainScene extends Phaser.Scene {
         // AI Setup
         this.setupAI();
 
+        // Attack Range Indicators
+        this.p1AttackRange = this.add.graphics();
+        this.p2AttackRange = this.add.graphics();
+
         // Manual Reset Key
         this.input.keyboard.on('keydown-R', () => {
             console.log("MainThread: Requesting AI Reset...");
@@ -380,6 +384,7 @@ export default class MainScene extends Phaser.Scene {
 
         this.handlePlayerInput();
         this.resolveCombat();
+        this.drawAttackRanges();
         
         // Update timers
         if (this.gameState.p1_stun > 0) this.gameState.p1_stun--;
@@ -570,6 +575,55 @@ export default class MainScene extends Phaser.Scene {
         }
 
         this.updateHealthBars();
+    }
+
+    drawAttackRanges() {
+        this.p1AttackRange.clear();
+        this.p2AttackRange.clear();
+
+        // Draw for P1
+        if (this.gameState.p1_attacking > 0) {
+            this.drawSingleRange(this.player, this.opponent, this.gameState.p1_attacking, this.gameState.p1_attack_timer, this.p1AttackRange, 0x00f2ff);
+        }
+
+        // Draw for P2
+        if (this.gameState.p2_attacking > 0) {
+            this.drawSingleRange(this.opponent, this.player, this.gameState.p2_attacking, this.gameState.p2_attack_timer, this.p2AttackRange, 0xff00c8);
+        }
+    }
+
+    drawSingleRange(attacker, target, type, timer, graphics, color) {
+        let phases, total_dur;
+        if (type === 1) { phases = this.LIGHT_ATTACK_PHASES; total_dur = this.LIGHT_ATTACK_DUR; }
+        else if (type === 2) { phases = this.HEAVY_ATTACK_PHASES; total_dur = this.HEAVY_ATTACK_DUR; }
+        else { phases = this.SPECIAL_ATTACK_PHASES; total_dur = this.SPECIAL_ATTACK_DUR; }
+
+        const elapsed = total_dur - timer;
+        const is_active = elapsed >= phases[0] && elapsed < (phases[0] + phases[1]);
+
+        if (is_active) {
+            let reach = this.ATTACK_REACH;
+            if (type === 2) reach += 20;
+            if (type === 3) reach += 50;
+
+            const dir = attacker.x < target.x ? 1 : -1;
+            
+            // Subtle fill
+            graphics.fillStyle(color, 0.15);
+            graphics.lineStyle(2, color, 0.4);
+            
+            // Draw an arc showing the reach
+            // We draw a semi-circle or slice facing the opponent
+            const startAngle = dir === 1 ? -90 : 90;
+            const endAngle = dir === 1 ? 90 : 270;
+            
+            graphics.beginPath();
+            graphics.moveTo(attacker.x, attacker.y);
+            graphics.arc(attacker.x, attacker.y, reach + 25, Phaser.Math.DegToRad(startAngle), Phaser.Math.DegToRad(endAngle), false);
+            graphics.closePath();
+            graphics.fillPath();
+            graphics.strokePath();
+        }
     }
 
     resetRound() {
