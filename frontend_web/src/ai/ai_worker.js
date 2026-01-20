@@ -4,7 +4,7 @@ const N_STACK = 4;
 const FEATURES = 16;
 
 class ReplayBuffer {
-    constructor(maxSize = 5000) {
+    constructor(maxSize = 100000) {
         this.buffer = [];
         this.maxSize = maxSize;
     }
@@ -21,13 +21,12 @@ class ReplayBuffer {
     }
 
     sample(batchSize) {
-        const validBuffer = this.buffer.filter(b => b.stackedState);
-        if (validBuffer.length === 0) return [];
+        if (this.buffer.length === 0) return [];
         
         const batch = [];
         for (let i = 0; i < batchSize; i++) {
-            const index = Math.floor(Math.random() * validBuffer.length);
-            batch.push(validBuffer[index]);
+            const index = Math.floor(Math.random() * this.buffer.length);
+            batch.push(this.buffer[index]);
         }
         return batch;
     }
@@ -39,7 +38,7 @@ let model = null;
 let normStats = null;
 let frameBuffer = [];
 let currentStack = null;
-let replayBuffer = new ReplayBuffer();
+let replayBuffer = new ReplayBuffer(100000);
 let isInitialized = false;
 let outputNames = [];
 
@@ -310,7 +309,7 @@ self.onmessage = async (e) => {
     }
 
     if (type === 'train') {
-        const validCount = replayBuffer.buffer.filter(b => b.stackedState).length;
+        const validCount = replayBuffer.length;
         if (!isInitialized || validCount < 32) {
             console.log(`AI Worker: Not enough valid experiences to train (${validCount}/32)`);
             return;
