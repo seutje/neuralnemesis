@@ -55,6 +55,10 @@ export default class MainScene extends Phaser.Scene {
     }
 
     create() {
+        // Show UI Overlay
+        const overlay = document.getElementById('ui-overlay');
+        if (overlay) overlay.style.display = 'flex';
+
         // Background
         this.add.rectangle(400, 300, 800, 600, 0x111111);
         this.add.rectangle(400, 550, 800, 100, 0x333333); // Ground
