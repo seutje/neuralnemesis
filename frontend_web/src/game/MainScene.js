@@ -64,14 +64,16 @@ export default class MainScene extends Phaser.Scene {
         this.add.rectangle(400, 300, 800, 600, 0x111111);
         this.add.rectangle(400, 550, 800, 100, 0x333333); // Ground
 
+        this.physics.world.setBounds(0, 0, 800, 500);
+
         // P1 (Player) - Blue
-        this.player = this.add.rectangle(200, 450, 50, 100, 0x0088ff);
+        this.player = this.add.rectangle(200, 500, 50, 100, 0x0088ff).setOrigin(0.5, 1);
         this.physics.add.existing(this.player);
         this.player.body.setCollideWorldBounds(true);
         this.player.body.setDragX(1500);
 
         // P2 (AI) - Red
-        this.opponent = this.add.rectangle(600, 450, 50, 100, 0xff4444);
+        this.opponent = this.add.rectangle(600, 500, 50, 100, 0xff4444).setOrigin(0.5, 1);
         this.physics.add.existing(this.opponent);
         this.opponent.body.setCollideWorldBounds(true);
         this.opponent.body.setDragX(1500);
@@ -352,11 +354,11 @@ export default class MainScene extends Phaser.Scene {
         // Handle Visual Crouching
         if (this.gameState.p1_crouching) {
             this.player.setDisplaySize(50, this.CROUCH_HEIGHT);
-            this.player.body.setSize(50, this.CROUCH_HEIGHT);
+            this.player.body.setSize(50, this.CROUCH_HEIGHT, false);
             this.player.body.setOffset(0, this.PLAYER_HEIGHT - this.CROUCH_HEIGHT);
         } else {
             this.player.setDisplaySize(50, this.PLAYER_HEIGHT);
-            this.player.body.setSize(50, this.PLAYER_HEIGHT);
+            this.player.body.setSize(50, this.PLAYER_HEIGHT, false);
             this.player.body.setOffset(0, 0);
         }
     }
@@ -409,11 +411,11 @@ export default class MainScene extends Phaser.Scene {
         // Handle Visual Crouching for AI
         if (this.gameState.p2_crouching) {
             this.opponent.setDisplaySize(50, this.CROUCH_HEIGHT);
-            this.opponent.body.setSize(50, this.CROUCH_HEIGHT);
+            this.opponent.body.setSize(50, this.CROUCH_HEIGHT, false);
             this.opponent.body.setOffset(0, this.PLAYER_HEIGHT - this.CROUCH_HEIGHT);
         } else {
             this.opponent.setDisplaySize(50, this.PLAYER_HEIGHT);
-            this.opponent.body.setSize(50, this.PLAYER_HEIGHT);
+            this.opponent.body.setSize(50, this.PLAYER_HEIGHT, false);
             this.opponent.body.setOffset(0, 0);
         }
     }
@@ -561,8 +563,8 @@ export default class MainScene extends Phaser.Scene {
         const p1_h = this.gameState.p1_crouching ? this.CROUCH_HEIGHT : this.PLAYER_HEIGHT;
         const p2_h = this.gameState.p2_crouching ? this.CROUCH_HEIGHT : this.PLAYER_HEIGHT;
 
-        const p1_rect = { x: this.player.x - 25, y: this.player.y - (p1_h/2), w: 50, h: p1_h };
-        const p2_rect = { x: this.opponent.x - 25, y: this.opponent.y - (p2_h/2), w: 50, h: p2_h };
+        const p1_rect = { x: this.player.x - 25, y: this.player.y - p1_h, w: 50, h: p1_h };
+        const p2_rect = { x: this.opponent.x - 25, y: this.opponent.y - p2_h, w: 50, h: p2_h };
 
         // P1 Attacks
         if (this.gameState.p1_attacking > 0 && !this.gameState.p1_has_hit) {
@@ -680,6 +682,11 @@ export default class MainScene extends Phaser.Scene {
         const is_active = elapsed >= phases[0] && elapsed < (phases[0] + phases[1]);
 
         if (is_active) {
+            const currentHeight = (attacker === this.player) ? 
+                (this.gameState.p1_crouching ? this.CROUCH_HEIGHT : this.PLAYER_HEIGHT) : 
+                (this.gameState.p2_crouching ? this.CROUCH_HEIGHT : this.PLAYER_HEIGHT);
+            const centerY = attacker.y - currentHeight / 2;
+
             let reach = this.ATTACK_REACH;
             if (type === 2) reach += 20;
             if (type === 3) reach += 50;
@@ -696,8 +703,8 @@ export default class MainScene extends Phaser.Scene {
             const endAngle = dir === 1 ? 90 : 270;
             
             graphics.beginPath();
-            graphics.moveTo(attacker.x, attacker.y);
-            graphics.arc(attacker.x, attacker.y, reach + 25, Phaser.Math.DegToRad(startAngle), Phaser.Math.DegToRad(endAngle), false);
+            graphics.moveTo(attacker.x, centerY);
+            graphics.arc(attacker.x, centerY, reach + 25, Phaser.Math.DegToRad(startAngle), Phaser.Math.DegToRad(endAngle), false);
             graphics.closePath();
             graphics.fillPath();
             graphics.strokePath();
@@ -720,16 +727,18 @@ export default class MainScene extends Phaser.Scene {
         this.gameState.p1_crouching = false;
         this.gameState.p2_crouching = false;
         
-        this.player.setPosition(200, 450);
-        this.opponent.setPosition(600, 450);
+        this.player.setPosition(200, 500);
+        this.opponent.setPosition(600, 500);
         this.player.body.setVelocity(0, 0);
         this.opponent.body.setVelocity(0, 0);
         
         // Reset Visuals
         this.player.setDisplaySize(50, this.PLAYER_HEIGHT);
-        this.player.body.setSize(50, this.PLAYER_HEIGHT);
+        this.player.body.setSize(50, this.PLAYER_HEIGHT, false);
+        this.player.body.setOffset(0, 0);
         this.opponent.setDisplaySize(50, this.PLAYER_HEIGHT);
-        this.opponent.body.setSize(50, this.PLAYER_HEIGHT);
+        this.opponent.body.setSize(50, this.PLAYER_HEIGHT, false);
+        this.opponent.body.setOffset(0, 0);
 
         this.statusText.setText('');
         this.roundEnded = false;
