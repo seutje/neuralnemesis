@@ -56,6 +56,9 @@ export default class MainScene extends Phaser.Scene {
 
     preload() {
         this.load.spritesheet('elon_idle', `${import.meta.env.BASE_URL}assets/sprites/elon/idle.png`, { frameWidth: 442, frameHeight: 369 });
+        this.load.spritesheet('elon_light', `${import.meta.env.BASE_URL}assets/sprites/elon/light.png`, { frameWidth: 442, frameHeight: 369 });
+        this.load.spritesheet('elon_heavy', `${import.meta.env.BASE_URL}assets/sprites/elon/heavy.png`, { frameWidth: 442, frameHeight: 369 });
+        this.load.spritesheet('elon_special', `${import.meta.env.BASE_URL}assets/sprites/elon/special.png`, { frameWidth: 442, frameHeight: 369 });
     }
 
     create() {
@@ -75,6 +78,28 @@ export default class MainScene extends Phaser.Scene {
             frames: this.anims.generateFrameNumbers('elon_idle', { start: 0, end: 35 }),
             frameRate: 30,
             repeat: -1
+        });
+
+        // Attack animations - Frame rates synced to logical durations
+        this.anims.create({
+            key: 'light_attack',
+            frames: this.anims.generateFrameNumbers('elon_light', { start: 0, end: 35 }),
+            frameRate: 98,
+            repeat: 0
+        });
+
+        this.anims.create({
+            key: 'heavy_attack',
+            frames: this.anims.generateFrameNumbers('elon_heavy', { start: 0, end: 35 }),
+            frameRate: 56,
+            repeat: 0
+        });
+
+        this.anims.create({
+            key: 'special_attack',
+            frames: this.anims.generateFrameNumbers('elon_special', { start: 0, end: 35 }),
+            frameRate: 36,
+            repeat: 0
         });
 
         // P1 (Player) - Elon Sprite
@@ -525,38 +550,9 @@ export default class MainScene extends Phaser.Scene {
             this.opponent.flipX = true; // Face Right
         }
         
-        // Attack colors with phase feedback
-        if (this.gameState.p1_attacking > 0) {
-            let type = this.gameState.p1_attacking;
-            let timer = this.gameState.p1_attack_timer;
-            let phases, total_dur, base_color;
-            if (type === 1) { phases = this.LIGHT_ATTACK_PHASES; total_dur = this.LIGHT_ATTACK_DUR; base_color = 0xffffff; }
-            else if (type === 2) { phases = this.HEAVY_ATTACK_PHASES; total_dur = this.HEAVY_ATTACK_DUR; base_color = 0xffff00; }
-            else { phases = this.SPECIAL_ATTACK_PHASES; total_dur = this.SPECIAL_ATTACK_DUR; base_color = 0xff00ff; }
-
-            const elapsed = total_dur - timer;
-            if (elapsed < phases[0]) this.player.setTint(0x444444); // Startup
-            else if (elapsed < phases[0] + phases[1]) this.player.setTint(base_color); // Active
-            else this.player.setTint(0x884400); // Recovery
-        } else {
-            this.player.clearTint();
-        }
-
-        if (this.gameState.p2_attacking > 0) {
-            let type = this.gameState.p2_attacking;
-            let timer = this.gameState.p2_attack_timer;
-            let phases, total_dur, base_color;
-            if (type === 1) { phases = this.LIGHT_ATTACK_PHASES; total_dur = this.LIGHT_ATTACK_DUR; base_color = 0xffffff; }
-            else if (type === 2) { phases = this.HEAVY_ATTACK_PHASES; total_dur = this.HEAVY_ATTACK_DUR; base_color = 0xffff00; }
-            else { phases = this.SPECIAL_ATTACK_PHASES; total_dur = this.SPECIAL_ATTACK_DUR; base_color = 0xff00ff; }
-
-            const elapsed = total_dur - timer;
-            if (elapsed < phases[0]) this.opponent.setTint(0x444444);
-            else if (elapsed < phases[0] + phases[1]) this.opponent.setTint(base_color);
-            else this.opponent.setTint(0x884400);
-        } else {
-            this.opponent.clearTint();
-        }
+        // Animation State Logic
+        this.updatePlayerAnimations(this.player, this.gameState.p1_attacking, this.gameState.p1_stun);
+        this.updatePlayerAnimations(this.opponent, this.gameState.p2_attacking, this.gameState.p2_stun);
 
         const currentState = this.captureGameState();
         
@@ -885,5 +881,22 @@ export default class MainScene extends Phaser.Scene {
             this.gameState.p1_blocking ? 1 : 0,
             this.gameState.p1_crouching ? 1 : 0
         ];
+    }
+
+    updatePlayerAnimations(sprite, attackType, stun) {
+        if (stun > 0) {
+            sprite.play('idle', true);
+            return;
+        }
+
+        if (attackType === 1) {
+            sprite.play('light_attack', true);
+        } else if (attackType === 2) {
+            sprite.play('heavy_attack', true);
+        } else if (attackType === 3) {
+            sprite.play('special_attack', true);
+        } else {
+            sprite.play('idle', true);
+        }
     }
 }
