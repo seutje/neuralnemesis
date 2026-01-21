@@ -55,6 +55,7 @@ export default class MainScene extends Phaser.Scene {
     }
 
     preload() {
+        this.load.spritesheet('elon_idle', `${import.meta.env.BASE_URL}assets/sprites/elon/idle.png`, { frameWidth: 442, frameHeight: 369 });
     }
 
     create() {
@@ -68,17 +69,33 @@ export default class MainScene extends Phaser.Scene {
 
         this.physics.world.setBounds(0, 0, 800, 500);
 
-        // P1 (Player) - Blue
-        this.player = this.add.rectangle(200, 500, 50, 100, 0x0088ff).setOrigin(0.5, 1);
+        // Animations
+        this.anims.create({
+            key: 'idle',
+            frames: this.anims.generateFrameNumbers('elon_idle', { start: 0, end: 35 }),
+            frameRate: 30,
+            repeat: -1
+        });
+
+        // P1 (Player) - Elon Sprite
+        this.player = this.add.sprite(200, 500, 'elon_idle').setOrigin(0.5, 1);
         this.physics.add.existing(this.player);
         this.player.body.setCollideWorldBounds(true);
         this.player.body.setDragX(1500);
+        this.player.body.setSize(50, 100);
+        this.player.body.setOffset(442/2 - 25, 369 - 100 - 50);
+        this.player.setScale(0.8); // Adjusted scale
+        this.player.play('idle');
 
-        // P2 (AI) - Red
-        this.opponent = this.add.rectangle(600, 500, 50, 100, 0xff4444).setOrigin(0.5, 1);
+        // P2 (AI) - Elon Sprite
+        this.opponent = this.add.sprite(600, 500, 'elon_idle').setOrigin(0.5, 1);
         this.physics.add.existing(this.opponent);
         this.opponent.body.setCollideWorldBounds(true);
         this.opponent.body.setDragX(1500);
+        this.opponent.body.setSize(50, 100);
+        this.opponent.body.setOffset(442/2 - 25, 369 - 100 - 50);
+        this.opponent.setScale(0.8);
+        this.opponent.play('idle');
 
         // UI
         this.createUI();
@@ -357,18 +374,18 @@ export default class MainScene extends Phaser.Scene {
         
         // Handle Visual Crouching
         if (this.gameState.p1_crouching) {
-            this.player.setDisplaySize(50, this.CROUCH_HEIGHT);
+            this.player.setScale(0.8, 0.4);
             this.player.body.setSize(50, this.CROUCH_HEIGHT, false);
-            this.player.body.setOffset(0, this.PLAYER_HEIGHT - this.CROUCH_HEIGHT);
+            this.player.body.setOffset(442/2 - 25, 369 - this.CROUCH_HEIGHT - 50);
         } else {
-            this.player.setDisplaySize(50, this.PLAYER_HEIGHT);
+            this.player.setScale(0.8);
             this.player.body.setSize(50, this.PLAYER_HEIGHT, false);
-            this.player.body.setOffset(0, 0);
+            this.player.body.setOffset(442/2 - 25, 369 - this.PLAYER_HEIGHT - 50);
         }
     }
 
     executeAIAction(action) {
-        // AI is P2
+         // AI is P2
         if (this.gameState.p2_stun > 0 || this.gameState.p2_attacking > 0) return;
 
         this.lastAIAction = action;
@@ -414,13 +431,13 @@ export default class MainScene extends Phaser.Scene {
 
         // Handle Visual Crouching for AI
         if (this.gameState.p2_crouching) {
-            this.opponent.setDisplaySize(50, this.CROUCH_HEIGHT);
+            this.opponent.setScale(0.8, 0.4);
             this.opponent.body.setSize(50, this.CROUCH_HEIGHT, false);
-            this.opponent.body.setOffset(0, this.PLAYER_HEIGHT - this.CROUCH_HEIGHT);
+            this.opponent.body.setOffset(442/2 - 25, 369 - this.CROUCH_HEIGHT - 50);
         } else {
-            this.opponent.setDisplaySize(50, this.PLAYER_HEIGHT);
+            this.opponent.setScale(0.8);
             this.opponent.body.setSize(50, this.PLAYER_HEIGHT, false);
-            this.opponent.body.setOffset(0, 0);
+            this.opponent.body.setOffset(442/2 - 25, 369 - this.PLAYER_HEIGHT - 50);
         }
     }
 
@@ -498,6 +515,15 @@ export default class MainScene extends Phaser.Scene {
         // Visual feedback for states
         this.player.setAlpha(this.gameState.p1_stun > 0 ? 0.5 : 1);
         this.opponent.setAlpha(this.gameState.p2_stun > 0 ? 0.5 : 1);
+
+        // Facing logic (Sprites face LEFT by default)
+        if (this.player.x < this.opponent.x) {
+            this.player.flipX = true; // Face Right
+            this.opponent.flipX = false; // Face Left
+        } else {
+            this.player.flipX = false; // Face Left
+            this.opponent.flipX = true; // Face Right
+        }
         
         // Attack colors with phase feedback
         if (this.gameState.p1_attacking > 0) {
@@ -509,11 +535,11 @@ export default class MainScene extends Phaser.Scene {
             else { phases = this.SPECIAL_ATTACK_PHASES; total_dur = this.SPECIAL_ATTACK_DUR; base_color = 0xff00ff; }
 
             const elapsed = total_dur - timer;
-            if (elapsed < phases[0]) this.player.setFillStyle(0x444444); // Startup (Gray)
-            else if (elapsed < phases[0] + phases[1]) this.player.setFillStyle(base_color); // Active
-            else this.player.setFillStyle(0x884400); // Recovery (Brown)
+            if (elapsed < phases[0]) this.player.setTint(0x444444); // Startup
+            else if (elapsed < phases[0] + phases[1]) this.player.setTint(base_color); // Active
+            else this.player.setTint(0x884400); // Recovery
         } else {
-            this.player.setFillStyle(0x0088ff);
+            this.player.clearTint();
         }
 
         if (this.gameState.p2_attacking > 0) {
@@ -525,11 +551,11 @@ export default class MainScene extends Phaser.Scene {
             else { phases = this.SPECIAL_ATTACK_PHASES; total_dur = this.SPECIAL_ATTACK_DUR; base_color = 0xff00ff; }
 
             const elapsed = total_dur - timer;
-            if (elapsed < phases[0]) this.opponent.setFillStyle(0x444444);
-            else if (elapsed < phases[0] + phases[1]) this.opponent.setFillStyle(base_color);
-            else this.opponent.setFillStyle(0x884400);
+            if (elapsed < phases[0]) this.opponent.setTint(0x444444);
+            else if (elapsed < phases[0] + phases[1]) this.opponent.setTint(base_color);
+            else this.opponent.setTint(0x884400);
         } else {
-            this.opponent.setFillStyle(0xff4444);
+            this.opponent.clearTint();
         }
 
         const currentState = this.captureGameState();
@@ -804,12 +830,15 @@ export default class MainScene extends Phaser.Scene {
         this.opponent.body.setVelocity(0, 0);
         
         // Reset Visuals
-        this.player.setDisplaySize(50, this.PLAYER_HEIGHT);
+        this.player.setScale(0.8);
+        this.player.clearTint();
         this.player.body.setSize(50, this.PLAYER_HEIGHT, false);
-        this.player.body.setOffset(0, 0);
-        this.opponent.setDisplaySize(50, this.PLAYER_HEIGHT);
+        this.player.body.setOffset(442/2 - 25, 369 - this.PLAYER_HEIGHT - 50);
+        
+        this.opponent.setScale(0.8);
+        this.opponent.clearTint();
         this.opponent.body.setSize(50, this.PLAYER_HEIGHT, false);
-        this.opponent.body.setOffset(0, 0);
+        this.opponent.body.setOffset(442/2 - 25, 369 - this.PLAYER_HEIGHT - 50);
 
         this.roundEnded = false;
         this.updateHealthBars();
