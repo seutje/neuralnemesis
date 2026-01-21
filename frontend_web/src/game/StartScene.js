@@ -47,8 +47,8 @@ export default class StartScene extends Phaser.Scene {
             "The longer you fight, the more dangerous it becomes.",
             "",
             "Controls:",
-            "WASD / Arrows - Move & Jump",
-            "J, K, L - Attacks",
+            "WASD / Arrows - Move, Crouch & Jump",
+            "J, K, L - Light, Heavy, Special Attacks",
             "SPACE - Block",
             "",
             "PRESS SPACE TO INITIATE COMBAT"
