@@ -50,6 +50,8 @@ export default class MainScene extends Phaser.Scene {
         // Humanizing AI: Action Queue
         this.aiActionQueue = [];
         this.REACTION_DELAY_FRAMES = 10; // ~160ms at 60fps
+        this.isCountingDown = false;
+        this.lastAIAction = undefined;
     }
 
     preload() {
@@ -98,6 +100,8 @@ export default class MainScene extends Phaser.Scene {
             console.log("MainThread: Requesting AI Reset...");
             this.aiWorker.postMessage({ type: 'reset_weights' });
         });
+
+        this.startCountdown();
     }
 
     createUI() {
@@ -440,10 +444,19 @@ export default class MainScene extends Phaser.Scene {
             return;
         }
 
+        if (this.isCountingDown) {
+            this.player.body.setVelocityX(0);
+            this.opponent.body.setVelocityX(0);
+        }
+
         // Handle AI Action Queue (Reaction Delay)
         if (this.aiActionQueue.length > this.REACTION_DELAY_FRAMES) {
             const next = this.aiActionQueue.shift();
-            this.executeAIAction(next.action);
+            
+            // Only execute action if NOT counting down
+            if (!this.isCountingDown) {
+                this.executeAIAction(next.action);
+            }
             
             // Update Debug UI
             this.confidenceText.setText(`AI Confidence: ${(next.confidence).toFixed(2)}`);
@@ -462,8 +475,11 @@ export default class MainScene extends Phaser.Scene {
         const prevH1 = this.gameState.p1_health;
         const prevH2 = this.gameState.p2_health;
 
-        this.handlePlayerInput();
-        this.resolveCombat();
+        if (!this.isCountingDown) {
+            this.handlePlayerInput();
+            this.resolveCombat();
+        }
+        
         this.drawAttackRanges();
         
         // Update timers
@@ -711,6 +727,61 @@ export default class MainScene extends Phaser.Scene {
         }
     }
 
+    startCountdown() {
+        this.isCountingDown = true;
+        let count = 3;
+        
+        // Reset player positions and velocities just in case
+        this.player.setPosition(200, 500);
+        this.opponent.setPosition(600, 500);
+        this.player.body.setVelocity(0, 0);
+        this.opponent.body.setVelocity(0, 0);
+
+        this.statusText.setText(count.toString());
+        this.statusText.setScale(4);
+        this.statusText.setAlpha(0);
+
+        const updateCountdown = () => {
+            if (count > 0) {
+                this.statusText.setText(count.toString());
+                this.statusText.setAlpha(1);
+                this.statusText.setScale(4);
+                
+                this.tweens.add({
+                    targets: this.statusText,
+                    scale: 1,
+                    alpha: 0.5,
+                    duration: 800,
+                    ease: 'Cubic.easeOut'
+                });
+
+                count--;
+                this.time.delayedCall(1000, updateCountdown);
+            } else {
+                this.statusText.setText('FIGHT!');
+                this.statusText.setAlpha(1);
+                this.statusText.setScale(2);
+                
+                this.tweens.add({
+                    targets: this.statusText,
+                    scale: 3,
+                    alpha: 0,
+                    duration: 1000,
+                    ease: 'Expo.easeOut',
+                    onComplete: () => {
+                        this.statusText.setText('');
+                        this.statusText.setScale(1);
+                        this.statusText.setAlpha(1);
+                    }
+                });
+
+                this.isCountingDown = false;
+            }
+        };
+
+        updateCountdown();
+    }
+
     resetRound() {
         this.gameState.p1_health = 100;
         this.gameState.p2_health = 100;
@@ -740,10 +811,12 @@ export default class MainScene extends Phaser.Scene {
         this.opponent.body.setSize(50, this.PLAYER_HEIGHT, false);
         this.opponent.body.setOffset(0, 0);
 
-        this.statusText.setText('');
         this.roundEnded = false;
         this.updateHealthBars();
         this.aiActionQueue = [];
+        this.waitingForPrediction = false;
+        this.lastAIAction = undefined;
+        this.startCountdown();
     }
 
     checkOverlap(r1, r2) {
