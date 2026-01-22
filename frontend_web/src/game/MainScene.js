@@ -16,8 +16,14 @@ export default class MainScene extends Phaser.Scene {
             p2_has_hit: false,
             p1_blocking: false,
             p2_blocking: false,
+            p1_stamina: 100,
+            p2_stamina: 100,
         };
         this.MAX_HEALTH = 100;
+        this.MAX_STAMINA = 100;
+        this.BLOCK_STAMINA_DRAIN = 0.2;
+        this.BLOCK_STAMINA_REGEN = 0.15;
+        this.BLOCK_STAMINA_DAMAGE_MULT = 2.0;
         
         // Attack Phase Data: [Startup, Active, Recovery]
         this.LIGHT_ATTACK_PHASES = [4, 6, 12];   // Total 22
@@ -157,6 +163,8 @@ export default class MainScene extends Phaser.Scene {
     createUI() {
         this.p1HealthBar = this.add.graphics();
         this.p2HealthBar = this.add.graphics();
+        this.p1StaminaBar = this.add.graphics();
+        this.p2StaminaBar = this.add.graphics();
         this.updateHealthBars();
 
         this.statusText = this.add.text(400, 300, '', { 
@@ -250,6 +258,8 @@ export default class MainScene extends Phaser.Scene {
 
     updateHealthBars() {
         const y = 50; // Moved up by 50px to avoid overlap
+        const staminaY = y + 36;
+        const staminaH = 10;
         this.p1HealthBar.clear();
         // P1 Health (Blue/Cyan)
         this.p1HealthBar.fillStyle(0x000000, 0.5);
@@ -258,6 +268,15 @@ export default class MainScene extends Phaser.Scene {
         this.p1HealthBar.fillRect(50, y, Math.max(0, this.gameState.p1_health) * 3, 30);
         this.p1HealthBar.lineStyle(2, 0x00f2ff, 0.5);
         this.p1HealthBar.strokeRect(50, y, 300, 30);
+
+        this.p1StaminaBar.clear();
+        this.p1StaminaBar.fillStyle(0x000000, 0.5);
+        this.p1StaminaBar.fillRect(50, staminaY, 300, staminaH);
+        this.p1StaminaBar.fillStyle(0xffd200, 1);
+        const p1StaminaWidth = (Math.max(0, this.gameState.p1_stamina) / this.MAX_STAMINA) * 300;
+        this.p1StaminaBar.fillRect(50, staminaY, p1StaminaWidth, staminaH);
+        this.p1StaminaBar.lineStyle(1, 0xffd200, 0.6);
+        this.p1StaminaBar.strokeRect(50, staminaY, 300, staminaH);
         
         // Labels
         if (!this.p1Label) {
@@ -281,6 +300,15 @@ export default class MainScene extends Phaser.Scene {
         this.p2HealthBar.fillRect(750 - p2Width, y, p2Width, 30);
         this.p2HealthBar.lineStyle(2, 0xff00c8, 0.5);
         this.p2HealthBar.strokeRect(450, y, 300, 30);
+
+        this.p2StaminaBar.clear();
+        this.p2StaminaBar.fillStyle(0x000000, 0.5);
+        this.p2StaminaBar.fillRect(450, staminaY, 300, staminaH);
+        this.p2StaminaBar.fillStyle(0xffd200, 1);
+        const p2StaminaWidth = (Math.max(0, this.gameState.p2_stamina) / this.MAX_STAMINA) * 300;
+        this.p2StaminaBar.fillRect(750 - p2StaminaWidth, staminaY, p2StaminaWidth, staminaH);
+        this.p2StaminaBar.lineStyle(1, 0xffd200, 0.6);
+        this.p2StaminaBar.strokeRect(450, staminaY, 300, staminaH);
     }
 
     setupAI() {
@@ -381,7 +409,7 @@ export default class MainScene extends Phaser.Scene {
             this.gameState.p1_crouching = true;
         }
 
-        if (this.keys.SPACE.isDown) {
+        if (this.keys.SPACE.isDown && this.gameState.p1_stamina > 0) {
             vx = 0;
             this.gameState.p1_blocking = true;
         }
@@ -438,7 +466,7 @@ export default class MainScene extends Phaser.Scene {
             this.gameState.p2_crouching = true;
         }
 
-        if (action === 5) { // Block
+        if (action === 5 && this.gameState.p2_stamina > 0) { // Block
             vx = 0;
             this.gameState.p2_blocking = true;
         }
@@ -548,6 +576,8 @@ export default class MainScene extends Phaser.Scene {
             if (this.gameState.p2_attack_timer === 0) this.gameState.p2_attacking = 0;
         }
 
+        this.updateStamina();
+
         // Visual feedback for states
         this.player.setAlpha(this.gameState.p1_stun > 0 ? 0.5 : 1);
         this.opponent.setAlpha(this.gameState.p2_stun > 0 ? 0.5 : 1);
@@ -638,7 +668,8 @@ export default class MainScene extends Phaser.Scene {
                 else { reach_rect.x -= reach; reach_rect.w += reach; }
 
                 if (this.checkOverlap(reach_rect, p2_rect)) {
-                    if (!this.gameState.p2_blocking) {
+                    const p2Blocking = this.gameState.p2_blocking && this.gameState.p2_stamina > 0;
+                    if (!p2Blocking) {
                         let damage = 1.5;
                         let stun = this.LIGHT_STUN;
                         if (type === 2) { damage = 4.0; stun = this.HEAVY_STUN; }
@@ -654,6 +685,11 @@ export default class MainScene extends Phaser.Scene {
                         const dir = this.player.x < this.opponent.x ? 1 : -1;
                         this.opponent.body.setVelocityX(dir * this.KNOCKBACK_VICTIM);
                         this.player.body.setVelocityX(-dir * this.KNOCKBACK_ATTACKER);
+                    } else {
+                        let damage = 1.5;
+                        if (type === 2) { damage = 4.0; }
+                        if (type === 3) { damage = 8.0; }
+                        this.applyBlockStamina('p2', damage);
                     }
                 }
             }
@@ -682,7 +718,8 @@ export default class MainScene extends Phaser.Scene {
                 else { reach_rect.x -= reach; reach_rect.w += reach; }
 
                 if (this.checkOverlap(reach_rect, p1_rect)) {
-                    if (!this.gameState.p1_blocking) {
+                    const p1Blocking = this.gameState.p1_blocking && this.gameState.p1_stamina > 0;
+                    if (!p1Blocking) {
                         let damage = 1.5;
                         let stun = this.LIGHT_STUN;
                         if (type === 2) { damage = 4.0; stun = this.HEAVY_STUN; }
@@ -698,6 +735,11 @@ export default class MainScene extends Phaser.Scene {
                         const dir = this.opponent.x < this.player.x ? 1 : -1;
                         this.player.body.setVelocityX(dir * this.KNOCKBACK_VICTIM);
                         this.opponent.body.setVelocityX(-dir * this.KNOCKBACK_ATTACKER);
+                    } else {
+                        let damage = 1.5;
+                        if (type === 2) { damage = 4.0; }
+                        if (type === 3) { damage = 8.0; }
+                        this.applyBlockStamina('p1', damage);
                     }
                 }
             }
@@ -829,6 +871,8 @@ export default class MainScene extends Phaser.Scene {
     resetRound() {
         this.gameState.p1_health = 100;
         this.gameState.p2_health = 100;
+        this.gameState.p1_stamina = this.MAX_STAMINA;
+        this.gameState.p2_stamina = this.MAX_STAMINA;
         this.gameState.p1_stun = 0;
         this.gameState.p2_stun = 0;
         this.gameState.p1_attacking = 0;
@@ -866,6 +910,39 @@ export default class MainScene extends Phaser.Scene {
         this.startCountdown();
     }
 
+    updateStamina() {
+        if (this.gameState.p1_blocking && this.gameState.p1_stamina > 0) {
+            this.gameState.p1_stamina = Math.max(0, this.gameState.p1_stamina - this.BLOCK_STAMINA_DRAIN);
+        } else {
+            this.gameState.p1_stamina = Math.min(this.MAX_STAMINA, this.gameState.p1_stamina + this.BLOCK_STAMINA_REGEN);
+        }
+        if (this.gameState.p1_stamina <= 0) {
+            this.gameState.p1_blocking = false;
+        }
+
+        if (this.gameState.p2_blocking && this.gameState.p2_stamina > 0) {
+            this.gameState.p2_stamina = Math.max(0, this.gameState.p2_stamina - this.BLOCK_STAMINA_DRAIN);
+        } else {
+            this.gameState.p2_stamina = Math.min(this.MAX_STAMINA, this.gameState.p2_stamina + this.BLOCK_STAMINA_REGEN);
+        }
+        if (this.gameState.p2_stamina <= 0) {
+            this.gameState.p2_blocking = false;
+        }
+
+        this.updateHealthBars();
+    }
+
+    applyBlockStamina(target, blockedDamage) {
+        const drain = blockedDamage * this.BLOCK_STAMINA_DAMAGE_MULT;
+        if (target === 'p1') {
+            this.gameState.p1_stamina = Math.max(0, this.gameState.p1_stamina - drain);
+            if (this.gameState.p1_stamina <= 0) this.gameState.p1_blocking = false;
+        } else {
+            this.gameState.p2_stamina = Math.max(0, this.gameState.p2_stamina - drain);
+            if (this.gameState.p2_stamina <= 0) this.gameState.p2_blocking = false;
+        }
+    }
+
     checkOverlap(r1, r2) {
         return r1.x < r2.x + r2.w && r1.x + r1.w > r2.x &&
                r1.y < r2.y + r2.h && r1.y + r1.h > r2.y;
@@ -890,6 +967,8 @@ export default class MainScene extends Phaser.Scene {
             dx, dy,
             this.gameState.p2_health / 100, // Self Health (AI)
             this.gameState.p1_health / 100, // Opponent Health (Human)
+            this.gameState.p2_stamina / this.MAX_STAMINA, // Self Stamina (AI)
+            this.gameState.p1_stamina / this.MAX_STAMINA, // Opponent Stamina (Human)
             self_vx,
             self_vy,
             opp_vx,

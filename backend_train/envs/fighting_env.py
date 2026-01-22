@@ -11,8 +11,8 @@ class FightingGameEnv(gym.Env):
         # Action Space: 0: Idle, 1: Left, 2: Right, 3: Jump, 4: Crouch, 5: Block, 6: Light_Attack, 7: Heavy_Attack, 8: Special
         self.action_space = spaces.Discrete(9)
 
-        # Observation Space (16 features)
-        self.observation_space = spaces.Box(low=-2.0, high=2.0, shape=(16,), dtype=np.float32)
+        # Observation Space (18 features)
+        self.observation_space = spaces.Box(low=-2.0, high=2.0, shape=(18,), dtype=np.float32)
 
         # Game constants
         self.WIDTH = 800
@@ -26,7 +26,11 @@ class FightingGameEnv(gym.Env):
         self.GRAVITY = 0.8
         
         self.MAX_HEALTH = 100
+        self.MAX_STAMINA = 100
         self.MAX_STEPS = 800 # Short episodes for faster feedback
+        self.BLOCK_STAMINA_DRAIN = 0.2
+        self.BLOCK_STAMINA_REGEN = 0.15
+        self.BLOCK_STAMINA_DAMAGE_MULT = 2.0
         
         # Frame data
         self.LIGHT_ATTACK_DUR = 22
@@ -69,6 +73,7 @@ class FightingGameEnv(gym.Env):
         self.p1_y = self.p2_y = self.GROUND_Y - self.PLAYER_HEIGHT
         self.p1_vx = self.p1_vy = self.p2_vx = self.p2_vy = 0
         self.p1_health = self.p2_health = self.MAX_HEALTH
+        self.p1_stamina = self.p2_stamina = self.MAX_STAMINA
         self.p1_stun = self.p2_stun = 0
         self.p1_attacking = self.p2_attacking = 0
         self.p1_attack_timer = self.p2_attack_timer = 0
@@ -87,6 +92,8 @@ class FightingGameEnv(gym.Env):
             dx, dy,
             self.p1_health / self.MAX_HEALTH,
             self.p2_health / self.MAX_HEALTH,
+            self.p1_stamina / self.MAX_STAMINA,
+            self.p2_stamina / self.MAX_STAMINA,
             self.p1_vx / 10.0,
             self.p1_vy / 15.0,
             self.p2_vx / 10.0,
@@ -122,6 +129,7 @@ class FightingGameEnv(gym.Env):
         self._apply_physics(2)
         
         reward = self._resolve_combat()
+        self._update_stamina()
         
         # Delta-Distance Reward: Reward for getting closer
         curr_dist = abs(self.p1_x - self.p2_x) / self.WIDTH
@@ -152,10 +160,12 @@ class FightingGameEnv(gym.Env):
             stun, atk, tmr = self.p1_stun, self.p1_attacking, self.p1_attack_timer
             vx, vy, blk, crch = self.p1_vx, self.p1_vy, self.p1_blocking, self.p1_crouching
             hit = self.p1_has_hit
+            stm = self.p1_stamina
         else:
             stun, atk, tmr = self.p2_stun, self.p2_attacking, self.p2_attack_timer
             vx, vy, blk, crch = self.p2_vx, self.p2_vy, self.p2_blocking, self.p2_crouching
             hit = self.p2_has_hit
+            stm = self.p2_stamina
 
         if stun > 0: blk = crch = False
         elif tmr > 0: pass 
@@ -169,7 +179,7 @@ class FightingGameEnv(gym.Env):
                     if player_num == 1: self.p1_vy = self.JUMP_FORCE
                     else: self.p2_vy = self.JUMP_FORCE
             elif action == 4: vx = 0; crch = True
-            elif action == 5: vx = 0; blk = True
+            elif action == 5: vx = 0; blk = stm > 0
             elif action == 6: atk = 1; tmr = self.LIGHT_ATTACK_DUR; vx = 0; hit = False
             elif action == 7: atk = 2; tmr = self.HEAVY_ATTACK_DUR; vx = 0; hit = False
             elif action == 8: atk = 3; tmr = self.SPECIAL_ATTACK_DUR; vx = 0; hit = False
@@ -189,6 +199,32 @@ class FightingGameEnv(gym.Env):
             self.p2_attack_timer = max(0, tmr - 1)
             self.p2_blocking, self.p2_crouching = blk, crch
             self.p2_has_hit = hit
+
+    def _update_stamina(self):
+        if self.p1_blocking and self.p1_stamina > 0:
+            self.p1_stamina = max(0.0, self.p1_stamina - self.BLOCK_STAMINA_DRAIN)
+        else:
+            self.p1_stamina = min(self.MAX_STAMINA, self.p1_stamina + self.BLOCK_STAMINA_REGEN)
+        if self.p1_stamina <= 0:
+            self.p1_blocking = False
+
+        if self.p2_blocking and self.p2_stamina > 0:
+            self.p2_stamina = max(0.0, self.p2_stamina - self.BLOCK_STAMINA_DRAIN)
+        else:
+            self.p2_stamina = min(self.MAX_STAMINA, self.p2_stamina + self.BLOCK_STAMINA_REGEN)
+        if self.p2_stamina <= 0:
+            self.p2_blocking = False
+
+    def _apply_block_stamina(self, player_num, blocked_damage):
+        drain = blocked_damage * self.BLOCK_STAMINA_DAMAGE_MULT
+        if player_num == 1:
+            self.p1_stamina = max(0.0, self.p1_stamina - drain)
+            if self.p1_stamina <= 0:
+                self.p1_blocking = False
+        else:
+            self.p2_stamina = max(0.0, self.p2_stamina - drain)
+            if self.p2_stamina <= 0:
+                self.p2_blocking = False
 
     def _apply_physics(self, player_num):
         if player_num == 1:
@@ -234,7 +270,9 @@ class FightingGameEnv(gym.Env):
                     else: rect[0] -= reach; rect[2] += reach
                     if check_collision(rect, p2_rect if p == 1 else p1_rect):
                         if p == 1: reward += 0.2 # Increased incentive for proximity attacking
-                        if not (self.p2_blocking if p == 1 else self.p1_blocking):
+                        target_blocking = (self.p2_blocking if p == 1 else self.p1_blocking)
+                        target_stamina = (self.p2_stamina if p == 1 else self.p1_stamina)
+                        if not target_blocking or target_stamina <= 0:
                             dmg = 3.0 if atk == 1 else 7.0 if atk == 2 else 12.0
                             stun = self.LIGHT_STUN if atk == 1 else self.HEAVY_STUN if atk == 2 else self.SPECIAL_STUN
                             if p == 1: self.p2_health -= dmg; self.p2_stun = stun; self.p2_attack_timer = self.p2_attacking = 0; self.p1_has_hit = True
@@ -242,6 +280,9 @@ class FightingGameEnv(gym.Env):
                             dir = 1 if (p == 1 and self.p1_x < self.p2_x) or (p == 2 and self.p2_x < self.p1_x) else -1
                             if p == 1: self.p2_vx, self.p1_vx = dir * self.KNOCKBACK_VICTIM, -dir * self.KNOCKBACK_ATTACKER
                             else: self.p1_vx, self.p2_vx = dir * self.KNOCKBACK_VICTIM, -dir * self.KNOCKBACK_ATTACKER
+                        else:
+                            dmg = 3.0 if atk == 1 else 7.0 if atk == 2 else 12.0
+                            self._apply_block_stamina(2 if p == 1 else 1, dmg)
 
         # Combat Reward Scaling (Aggressive 2:1)
         dmg_dealt, dmg_taken = max(0, h_opp_prev - self.p2_health), max(0, h_self_prev - self.p1_health)
