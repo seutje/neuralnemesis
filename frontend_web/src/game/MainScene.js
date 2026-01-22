@@ -135,10 +135,15 @@ export default class MainScene extends Phaser.Scene {
         // AI Setup
         this.setupAI();
 
+        this.debugEnabled = new URLSearchParams(window.location.search).has('debug');
+
         // Attack Range Indicators
         this.p1AttackRange = this.add.graphics();
         this.p2AttackRange = this.add.graphics();
         this.hitboxDebug = this.add.graphics();
+        this.p1AttackRange.setVisible(this.debugEnabled);
+        this.p2AttackRange.setVisible(this.debugEnabled);
+        this.hitboxDebug.setVisible(this.debugEnabled);
 
         // Manual Reset Key
         this.input.keyboard.on('keydown-R', () => {
@@ -525,8 +530,10 @@ export default class MainScene extends Phaser.Scene {
             this.resolveCombat();
         }
         
-        this.drawAttackRanges();
-        this.drawDebugHitboxes();
+        if (this.debugEnabled) {
+            this.drawAttackRanges();
+            this.drawDebugHitboxes();
+        }
         
         // Update timers
         if (this.gameState.p1_stun > 0) this.gameState.p1_stun--;
