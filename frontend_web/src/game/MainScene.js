@@ -39,8 +39,10 @@ export default class MainScene extends Phaser.Scene {
         this.WIDTH = 800;
         this.HEIGHT = 600;
         this.GROUND_Y = 500;
-        this.PLAYER_HEIGHT = 100;
-        this.CROUCH_HEIGHT = 50;
+        this.PLAYER_HEIGHT = 250;
+        this.PLAYER_WIDTH = 100;
+        this.CROUCH_HEIGHT = 100;
+        this.SPRITE_BOTTOM_PAD = 50;
         this.isAiReady = false;
         this.waitingForPrediction = false;
         this.roundEnded = false;
@@ -107,8 +109,8 @@ export default class MainScene extends Phaser.Scene {
         this.physics.add.existing(this.player);
         this.player.body.setCollideWorldBounds(true);
         this.player.body.setDragX(1500);
-        this.player.body.setSize(50, 100);
-        this.player.body.setOffset(442/2 - 25, 369 - 100 - 50);
+        this.player.body.setSize(this.PLAYER_WIDTH, this.PLAYER_HEIGHT);
+        this.player.body.setOffset(442 / 2 - this.PLAYER_WIDTH / 2, 369 - this.PLAYER_HEIGHT - this.SPRITE_BOTTOM_PAD);
         this.player.setScale(0.8); // Adjusted scale
         this.player.play('idle');
 
@@ -117,8 +119,8 @@ export default class MainScene extends Phaser.Scene {
         this.physics.add.existing(this.opponent);
         this.opponent.body.setCollideWorldBounds(true);
         this.opponent.body.setDragX(1500);
-        this.opponent.body.setSize(50, 100);
-        this.opponent.body.setOffset(442/2 - 25, 369 - 100 - 50);
+        this.opponent.body.setSize(this.PLAYER_WIDTH, this.PLAYER_HEIGHT);
+        this.opponent.body.setOffset(442 / 2 - this.PLAYER_WIDTH / 2, 369 - this.PLAYER_HEIGHT - this.SPRITE_BOTTOM_PAD);
         this.opponent.setScale(0.8);
         this.opponent.play('idle');
 
@@ -401,12 +403,12 @@ export default class MainScene extends Phaser.Scene {
         // Handle Visual Crouching
         if (this.gameState.p1_crouching) {
             this.player.setScale(0.8, 0.4);
-            this.player.body.setSize(50, this.CROUCH_HEIGHT, false);
-            this.player.body.setOffset(442/2 - 25, 369 - this.CROUCH_HEIGHT - 50);
+            this.player.body.setSize(this.PLAYER_WIDTH, this.CROUCH_HEIGHT, false);
+            this.player.body.setOffset(442 / 2 - this.PLAYER_WIDTH / 2, 369 - this.CROUCH_HEIGHT - this.SPRITE_BOTTOM_PAD);
         } else {
             this.player.setScale(0.8);
-            this.player.body.setSize(50, this.PLAYER_HEIGHT, false);
-            this.player.body.setOffset(442/2 - 25, 369 - this.PLAYER_HEIGHT - 50);
+            this.player.body.setSize(this.PLAYER_WIDTH, this.PLAYER_HEIGHT, false);
+            this.player.body.setOffset(442 / 2 - this.PLAYER_WIDTH / 2, 369 - this.PLAYER_HEIGHT - this.SPRITE_BOTTOM_PAD);
         }
     }
 
@@ -458,12 +460,12 @@ export default class MainScene extends Phaser.Scene {
         // Handle Visual Crouching for AI
         if (this.gameState.p2_crouching) {
             this.opponent.setScale(0.8, 0.4);
-            this.opponent.body.setSize(50, this.CROUCH_HEIGHT, false);
-            this.opponent.body.setOffset(442/2 - 25, 369 - this.CROUCH_HEIGHT - 50);
+            this.opponent.body.setSize(this.PLAYER_WIDTH, this.CROUCH_HEIGHT, false);
+            this.opponent.body.setOffset(442 / 2 - this.PLAYER_WIDTH / 2, 369 - this.CROUCH_HEIGHT - this.SPRITE_BOTTOM_PAD);
         } else {
             this.opponent.setScale(0.8);
-            this.opponent.body.setSize(50, this.PLAYER_HEIGHT, false);
-            this.opponent.body.setOffset(442/2 - 25, 369 - this.PLAYER_HEIGHT - 50);
+            this.opponent.body.setSize(this.PLAYER_WIDTH, this.PLAYER_HEIGHT, false);
+            this.opponent.body.setOffset(442 / 2 - this.PLAYER_WIDTH / 2, 369 - this.PLAYER_HEIGHT - this.SPRITE_BOTTOM_PAD);
         }
     }
 
@@ -603,8 +605,8 @@ export default class MainScene extends Phaser.Scene {
         const p1_h = this.gameState.p1_crouching ? this.CROUCH_HEIGHT : this.PLAYER_HEIGHT;
         const p2_h = this.gameState.p2_crouching ? this.CROUCH_HEIGHT : this.PLAYER_HEIGHT;
 
-        const p1_rect = { x: this.player.x - 25, y: this.player.y - p1_h, w: 50, h: p1_h };
-        const p2_rect = { x: this.opponent.x - 25, y: this.opponent.y - p2_h, w: 50, h: p2_h };
+        const p1_rect = { x: this.player.x - this.PLAYER_WIDTH / 2, y: this.player.y - p1_h, w: this.PLAYER_WIDTH, h: p1_h };
+        const p2_rect = { x: this.opponent.x - this.PLAYER_WIDTH / 2, y: this.opponent.y - p2_h, w: this.PLAYER_WIDTH, h: p2_h };
 
         // P1 Attacks
         if (this.gameState.p1_attacking > 0 && !this.gameState.p1_has_hit) {
@@ -738,9 +740,9 @@ export default class MainScene extends Phaser.Scene {
             graphics.lineStyle(2, color, 0.4);
             
             // Draw a rectangular hitbox indicator matching the logical reach_rect
-            const rectW = 50 + reach; // 50 is PLAYER_WIDTH
+            const rectW = this.PLAYER_WIDTH + reach;
             const rectH = currentHeight;
-            const rectX = (dir === 1) ? attacker.x - 25 : attacker.x + 25 - rectW;
+            const rectX = (dir === 1) ? attacker.x - this.PLAYER_WIDTH / 2 : attacker.x + this.PLAYER_WIDTH / 2 - rectW;
             const rectY = attacker.y - rectH;
 
             graphics.fillRect(rectX, rectY, rectW, rectH);
@@ -754,12 +756,12 @@ export default class MainScene extends Phaser.Scene {
         // P1 Hitbox (Cyan)
         const p1_h = this.gameState.p1_crouching ? this.CROUCH_HEIGHT : this.PLAYER_HEIGHT;
         this.hitboxDebug.lineStyle(1, 0x00f2ff, 0.8);
-        this.hitboxDebug.strokeRect(this.player.x - 25, this.player.y - p1_h, 50, p1_h);
+        this.hitboxDebug.strokeRect(this.player.x - this.PLAYER_WIDTH / 2, this.player.y - p1_h, this.PLAYER_WIDTH, p1_h);
 
         // P2 Hitbox (Magenta)
         const p2_h = this.gameState.p2_crouching ? this.CROUCH_HEIGHT : this.PLAYER_HEIGHT;
         this.hitboxDebug.lineStyle(1, 0xff00c8, 0.8);
-        this.hitboxDebug.strokeRect(this.opponent.x - 25, this.opponent.y - p2_h, 50, p2_h);
+        this.hitboxDebug.strokeRect(this.opponent.x - this.PLAYER_WIDTH / 2, this.opponent.y - p2_h, this.PLAYER_WIDTH, p2_h);
     }
 
     startCountdown() {
@@ -841,13 +843,13 @@ export default class MainScene extends Phaser.Scene {
         // Reset Visuals
         this.player.setScale(0.8);
         this.player.clearTint();
-        this.player.body.setSize(50, this.PLAYER_HEIGHT, false);
-        this.player.body.setOffset(442/2 - 25, 369 - this.PLAYER_HEIGHT - 50);
+        this.player.body.setSize(this.PLAYER_WIDTH, this.PLAYER_HEIGHT, false);
+        this.player.body.setOffset(442 / 2 - this.PLAYER_WIDTH / 2, 369 - this.PLAYER_HEIGHT - this.SPRITE_BOTTOM_PAD);
         
         this.opponent.setScale(0.8);
         this.opponent.clearTint();
-        this.opponent.body.setSize(50, this.PLAYER_HEIGHT, false);
-        this.opponent.body.setOffset(442/2 - 25, 369 - this.PLAYER_HEIGHT - 50);
+        this.opponent.body.setSize(this.PLAYER_WIDTH, this.PLAYER_HEIGHT, false);
+        this.opponent.body.setOffset(442 / 2 - this.PLAYER_WIDTH / 2, 369 - this.PLAYER_HEIGHT - this.SPRITE_BOTTOM_PAD);
 
         this.roundEnded = false;
         this.updateHealthBars();
