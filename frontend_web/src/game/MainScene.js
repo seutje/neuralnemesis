@@ -85,7 +85,8 @@ export default class MainScene extends Phaser.Scene {
             key: 'idle',
             frames: this.anims.generateFrameNumbers('elon_idle', { start: 0, end: 35 }),
             frameRate: 30,
-            repeat: -1
+            repeat: -1,
+            yoyo: true
         });
 
         // Attack animations - Frame rates synced to logical durations
