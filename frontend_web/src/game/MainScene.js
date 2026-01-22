@@ -136,6 +136,7 @@ export default class MainScene extends Phaser.Scene {
         // Attack Range Indicators
         this.p1AttackRange = this.add.graphics();
         this.p2AttackRange = this.add.graphics();
+        this.hitboxDebug = this.add.graphics();
 
         // Manual Reset Key
         this.input.keyboard.on('keydown-R', () => {
@@ -523,6 +524,7 @@ export default class MainScene extends Phaser.Scene {
         }
         
         this.drawAttackRanges();
+        this.drawDebugHitboxes();
         
         // Update timers
         if (this.gameState.p1_stun > 0) this.gameState.p1_stun--;
@@ -735,18 +737,29 @@ export default class MainScene extends Phaser.Scene {
             graphics.fillStyle(color, 0.15);
             graphics.lineStyle(2, color, 0.4);
             
-            // Draw an arc showing the reach
-            // We draw a semi-circle or slice facing the opponent
-            const startAngle = dir === 1 ? -90 : 90;
-            const endAngle = dir === 1 ? 90 : 270;
-            
-            graphics.beginPath();
-            graphics.moveTo(attacker.x, centerY);
-            graphics.arc(attacker.x, centerY, reach + 25, Phaser.Math.DegToRad(startAngle), Phaser.Math.DegToRad(endAngle), false);
-            graphics.closePath();
-            graphics.fillPath();
-            graphics.strokePath();
+            // Draw a rectangular hitbox indicator matching the logical reach_rect
+            const rectW = 50 + reach; // 50 is PLAYER_WIDTH
+            const rectH = currentHeight;
+            const rectX = (dir === 1) ? attacker.x - 25 : attacker.x + 25 - rectW;
+            const rectY = attacker.y - rectH;
+
+            graphics.fillRect(rectX, rectY, rectW, rectH);
+            graphics.strokeRect(rectX, rectY, rectW, rectH);
         }
+    }
+
+    drawDebugHitboxes() {
+        this.hitboxDebug.clear();
+        
+        // P1 Hitbox (Cyan)
+        const p1_h = this.gameState.p1_crouching ? this.CROUCH_HEIGHT : this.PLAYER_HEIGHT;
+        this.hitboxDebug.lineStyle(1, 0x00f2ff, 0.8);
+        this.hitboxDebug.strokeRect(this.player.x - 25, this.player.y - p1_h, 50, p1_h);
+
+        // P2 Hitbox (Magenta)
+        const p2_h = this.gameState.p2_crouching ? this.CROUCH_HEIGHT : this.PLAYER_HEIGHT;
+        this.hitboxDebug.lineStyle(1, 0xff00c8, 0.8);
+        this.hitboxDebug.strokeRect(this.opponent.x - 25, this.opponent.y - p2_h, 50, p2_h);
     }
 
     startCountdown() {
