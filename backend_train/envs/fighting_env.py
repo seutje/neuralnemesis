@@ -18,9 +18,9 @@ class FightingGameEnv(gym.Env):
         self.WIDTH = 800
         self.HEIGHT = 600
         self.GROUND_Y = 500
-        self.PLAYER_WIDTH = 50
-        self.PLAYER_HEIGHT = 100
-        self.CROUCH_HEIGHT = 50
+        self.PLAYER_WIDTH = 100
+        self.PLAYER_HEIGHT = 250
+        self.CROUCH_HEIGHT = 100
         self.WALK_SPEED = 5
         self.JUMP_FORCE = -15
         self.GRAVITY = 0.8
