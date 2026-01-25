@@ -48,7 +48,10 @@ export default class MainScene extends Phaser.Scene {
         this.PLAYER_HEIGHT = 250;
         this.PLAYER_WIDTH = 100;
         this.CROUCH_HEIGHT = 100;
-        this.SPRITE_BOTTOM_PAD = 50;
+        this.CHAR_CONFIG = {
+            elon: { width: 442, height: 369, pad: 50 },
+            luigi: { width: 362, height: 377, pad: 41 }
+        };
         this.isAiReady = false;
         this.waitingForPrediction = false;
         this.roundEnded = false;
@@ -63,10 +66,17 @@ export default class MainScene extends Phaser.Scene {
     }
 
     preload() {
-        this.load.spritesheet('elon_idle', `${import.meta.env.BASE_URL}assets/sprites/elon/idle.png`, { frameWidth: 442, frameHeight: 369 });
-        this.load.spritesheet('elon_light', `${import.meta.env.BASE_URL}assets/sprites/elon/light.png`, { frameWidth: 442, frameHeight: 369 });
-        this.load.spritesheet('elon_heavy', `${import.meta.env.BASE_URL}assets/sprites/elon/heavy.png`, { frameWidth: 442, frameHeight: 369 });
-        this.load.spritesheet('elon_special', `${import.meta.env.BASE_URL}assets/sprites/elon/special.png`, { frameWidth: 442, frameHeight: 369 });
+        const elon = this.CHAR_CONFIG.elon;
+        this.load.spritesheet('elon_idle', `${import.meta.env.BASE_URL}assets/sprites/elon/idle.png`, { frameWidth: elon.width, frameHeight: elon.height });
+        this.load.spritesheet('elon_light', `${import.meta.env.BASE_URL}assets/sprites/elon/light.png`, { frameWidth: elon.width, frameHeight: elon.height });
+        this.load.spritesheet('elon_heavy', `${import.meta.env.BASE_URL}assets/sprites/elon/heavy.png`, { frameWidth: elon.width, frameHeight: elon.height });
+        this.load.spritesheet('elon_special', `${import.meta.env.BASE_URL}assets/sprites/elon/special.png`, { frameWidth: elon.width, frameHeight: elon.height });
+
+        const luigi = this.CHAR_CONFIG.luigi;
+        this.load.spritesheet('luigi_idle', `${import.meta.env.BASE_URL}assets/sprites/luigi/idle.png`, { frameWidth: luigi.width, frameHeight: luigi.height });
+        this.load.spritesheet('luigi_light', `${import.meta.env.BASE_URL}assets/sprites/luigi/punch.png`, { frameWidth: luigi.width, frameHeight: luigi.height });
+        this.load.spritesheet('luigi_heavy', `${import.meta.env.BASE_URL}assets/sprites/luigi/kick.png`, { frameWidth: luigi.width, frameHeight: luigi.height });
+        this.load.spritesheet('luigi_special', `${import.meta.env.BASE_URL}assets/sprites/luigi/special.png`, { frameWidth: luigi.width, frameHeight: luigi.height });
     }
 
     create() {
@@ -81,55 +91,63 @@ export default class MainScene extends Phaser.Scene {
         this.physics.world.setBounds(0, 0, 800, 500);
 
         // Animations
-        this.anims.create({
-            key: 'idle',
-            frames: this.anims.generateFrameNumbers('elon_idle', { start: 0, end: 35 }),
-            frameRate: 30,
-            repeat: -1,
-            yoyo: true
+        const characters = ['elon', 'luigi'];
+        characters.forEach(char => {
+            this.anims.create({
+                key: `${char}_idle`,
+                frames: this.anims.generateFrameNumbers(`${char}_idle`, { start: 0, end: 35 }),
+                frameRate: 30,
+                repeat: -1,
+                yoyo: true
+            });
+
+            this.anims.create({
+                key: `${char}_light_attack`,
+                frames: this.anims.generateFrameNumbers(`${char}_light`, { start: 0, end: 35 }),
+                frameRate: 98,
+                repeat: 0
+            });
+
+            this.anims.create({
+                key: `${char}_heavy_attack`,
+                frames: this.anims.generateFrameNumbers(`${char}_heavy`, { start: 0, end: 35 }),
+                frameRate: 56,
+                repeat: 0
+            });
+
+            this.anims.create({
+                key: `${char}_special_attack`,
+                frames: this.anims.generateFrameNumbers(`${char}_special`, { start: 0, end: 35 }),
+                frameRate: 36,
+                repeat: 0
+            });
         });
 
-        // Attack animations - Frame rates synced to logical durations
-        this.anims.create({
-            key: 'light_attack',
-            frames: this.anims.generateFrameNumbers('elon_light', { start: 0, end: 35 }),
-            frameRate: 98,
-            repeat: 0
-        });
-
-        this.anims.create({
-            key: 'heavy_attack',
-            frames: this.anims.generateFrameNumbers('elon_heavy', { start: 0, end: 35 }),
-            frameRate: 56,
-            repeat: 0
-        });
-
-        this.anims.create({
-            key: 'special_attack',
-            frames: this.anims.generateFrameNumbers('elon_special', { start: 0, end: 35 }),
-            frameRate: 36,
-            repeat: 0
-        });
-
-        // P1 (Player) - Elon Sprite
-        this.player = this.add.sprite(200, 500, 'elon_idle').setOrigin(0.5, 1);
+        // P1 (Player) - Luigi Sprite
+        const p1Char = 'luigi';
+        const p1Cfg = this.CHAR_CONFIG[p1Char];
+        this.player = this.add.sprite(200, 500, `${p1Char}_idle`).setOrigin(0.5, 1);
+        this.player.charType = p1Char;
         this.physics.add.existing(this.player);
         this.player.body.setCollideWorldBounds(true);
         this.player.body.setDragX(1500);
         this.player.body.setSize(this.PLAYER_WIDTH, this.PLAYER_HEIGHT);
-        this.player.body.setOffset(442 / 2 - this.PLAYER_WIDTH / 2, 369 - this.PLAYER_HEIGHT - this.SPRITE_BOTTOM_PAD);
-        this.player.setScale(0.8); // Adjusted scale
-        this.player.play('idle');
+        this.player.body.setOffset(p1Cfg.width / 2 - this.PLAYER_WIDTH / 2, p1Cfg.height - this.PLAYER_HEIGHT - p1Cfg.pad);
+        this.player.setScale(0.8);
+        this.player.play(`${p1Char}_idle`);
 
         // P2 (AI) - Elon Sprite
-        this.opponent = this.add.sprite(600, 500, 'elon_idle').setOrigin(0.5, 1);
+        const p2Char = 'elon';
+        const p2Cfg = this.CHAR_CONFIG[p2Char];
+        this.opponent = this.add.sprite(600, 500, `${p2Char}_idle`).setOrigin(0.5, 1);
+        this.opponent.charType = p2Char;
         this.physics.add.existing(this.opponent);
         this.opponent.body.setCollideWorldBounds(true);
         this.opponent.body.setDragX(1500);
         this.opponent.body.setSize(this.PLAYER_WIDTH, this.PLAYER_HEIGHT);
-        this.opponent.body.setOffset(442 / 2 - this.PLAYER_WIDTH / 2, 369 - this.PLAYER_HEIGHT - this.SPRITE_BOTTOM_PAD);
+        this.opponent.body.setOffset(p2Cfg.width / 2 - this.PLAYER_WIDTH / 2, p2Cfg.height - this.PLAYER_HEIGHT - p2Cfg.pad);
         this.opponent.setScale(0.8);
-        this.opponent.play('idle');
+        this.opponent.play(`${p2Char}_idle`);
 
         // UI
         this.createUI();
@@ -435,14 +453,15 @@ export default class MainScene extends Phaser.Scene {
         this.player.body.setVelocityX(vx);
         
         // Handle Visual Crouching
+        const p1Cfg = this.CHAR_CONFIG[this.player.charType];
         if (this.gameState.p1_crouching) {
             this.player.setScale(0.8, 0.4);
             this.player.body.setSize(this.PLAYER_WIDTH, this.CROUCH_HEIGHT, false);
-            this.player.body.setOffset(442 / 2 - this.PLAYER_WIDTH / 2, 369 - this.CROUCH_HEIGHT - this.SPRITE_BOTTOM_PAD);
+            this.player.body.setOffset(p1Cfg.width / 2 - this.PLAYER_WIDTH / 2, p1Cfg.height - this.CROUCH_HEIGHT - p1Cfg.pad);
         } else {
             this.player.setScale(0.8);
             this.player.body.setSize(this.PLAYER_WIDTH, this.PLAYER_HEIGHT, false);
-            this.player.body.setOffset(442 / 2 - this.PLAYER_WIDTH / 2, 369 - this.PLAYER_HEIGHT - this.SPRITE_BOTTOM_PAD);
+            this.player.body.setOffset(p1Cfg.width / 2 - this.PLAYER_WIDTH / 2, p1Cfg.height - this.PLAYER_HEIGHT - p1Cfg.pad);
         }
     }
 
@@ -492,14 +511,15 @@ export default class MainScene extends Phaser.Scene {
         this.opponent.body.setVelocityX(vx);
 
         // Handle Visual Crouching for AI
+        const p2Cfg = this.CHAR_CONFIG[this.opponent.charType];
         if (this.gameState.p2_crouching) {
             this.opponent.setScale(0.8, 0.4);
             this.opponent.body.setSize(this.PLAYER_WIDTH, this.CROUCH_HEIGHT, false);
-            this.opponent.body.setOffset(442 / 2 - this.PLAYER_WIDTH / 2, 369 - this.CROUCH_HEIGHT - this.SPRITE_BOTTOM_PAD);
+            this.opponent.body.setOffset(p2Cfg.width / 2 - this.PLAYER_WIDTH / 2, p2Cfg.height - this.CROUCH_HEIGHT - p2Cfg.pad);
         } else {
             this.opponent.setScale(0.8);
             this.opponent.body.setSize(this.PLAYER_WIDTH, this.PLAYER_HEIGHT, false);
-            this.opponent.body.setOffset(442 / 2 - this.PLAYER_WIDTH / 2, 369 - this.PLAYER_HEIGHT - this.SPRITE_BOTTOM_PAD);
+            this.opponent.body.setOffset(p2Cfg.width / 2 - this.PLAYER_WIDTH / 2, p2Cfg.height - this.PLAYER_HEIGHT - p2Cfg.pad);
         }
     }
 
@@ -583,18 +603,18 @@ export default class MainScene extends Phaser.Scene {
         this.player.setAlpha(this.gameState.p1_stun > 0 ? 0.5 : 1);
         this.opponent.setAlpha(this.gameState.p2_stun > 0 ? 0.5 : 1);
 
-        // Facing logic (Sprites face LEFT by default)
+        // Facing logic (Elon faces LEFT by default, Luigi faces RIGHT by default)
         if (this.player.x < this.opponent.x) {
-            this.player.flipX = true; // Face Right
-            this.opponent.flipX = false; // Face Left
+            this.player.flipX = (this.player.charType === 'luigi') ? false : true; // Face Right
+            this.opponent.flipX = (this.opponent.charType === 'luigi') ? true : false; // Face Left
         } else {
-            this.player.flipX = false; // Face Left
-            this.opponent.flipX = true; // Face Right
+            this.player.flipX = (this.player.charType === 'luigi') ? true : false; // Face Left
+            this.opponent.flipX = (this.opponent.charType === 'luigi') ? false : true; // Face Right
         }
         
         // Animation State Logic
-        this.updatePlayerAnimations(this.player, this.gameState.p1_attacking, this.gameState.p1_stun);
-        this.updatePlayerAnimations(this.opponent, this.gameState.p2_attacking, this.gameState.p2_stun);
+        this.updatePlayerAnimations(this.player, this.gameState.p1_attacking, this.gameState.p1_stun, this.player.charType);
+        this.updatePlayerAnimations(this.opponent, this.gameState.p2_attacking, this.gameState.p2_stun, this.opponent.charType);
 
         const currentState = this.captureGameState();
         
@@ -893,15 +913,17 @@ export default class MainScene extends Phaser.Scene {
         this.opponent.body.setVelocity(0, 0);
         
         // Reset Visuals
+        const p1Cfg = this.CHAR_CONFIG[this.player.charType];
         this.player.setScale(0.8);
         this.player.clearTint();
         this.player.body.setSize(this.PLAYER_WIDTH, this.PLAYER_HEIGHT, false);
-        this.player.body.setOffset(442 / 2 - this.PLAYER_WIDTH / 2, 369 - this.PLAYER_HEIGHT - this.SPRITE_BOTTOM_PAD);
+        this.player.body.setOffset(p1Cfg.width / 2 - this.PLAYER_WIDTH / 2, p1Cfg.height - this.PLAYER_HEIGHT - p1Cfg.pad);
         
+        const p2Cfg = this.CHAR_CONFIG[this.opponent.charType];
         this.opponent.setScale(0.8);
         this.opponent.clearTint();
         this.opponent.body.setSize(this.PLAYER_WIDTH, this.PLAYER_HEIGHT, false);
-        this.opponent.body.setOffset(442 / 2 - this.PLAYER_WIDTH / 2, 369 - this.PLAYER_HEIGHT - this.SPRITE_BOTTOM_PAD);
+        this.opponent.body.setOffset(p2Cfg.width / 2 - this.PLAYER_WIDTH / 2, p2Cfg.height - this.PLAYER_HEIGHT - p2Cfg.pad);
 
         this.roundEnded = false;
         this.updateHealthBars();
@@ -985,20 +1007,20 @@ export default class MainScene extends Phaser.Scene {
         ];
     }
 
-    updatePlayerAnimations(sprite, attackType, stun) {
+    updatePlayerAnimations(sprite, attackType, stun, charType) {
         if (stun > 0) {
-            sprite.play('idle', true);
+            sprite.play(`${charType}_idle`, true);
             return;
         }
 
         if (attackType === 1) {
-            sprite.play('light_attack', true);
+            sprite.play(`${charType}_light_attack`, true);
         } else if (attackType === 2) {
-            sprite.play('heavy_attack', true);
+            sprite.play(`${charType}_heavy_attack`, true);
         } else if (attackType === 3) {
-            sprite.play('special_attack', true);
+            sprite.play(`${charType}_special_attack`, true);
         } else {
-            sprite.play('idle', true);
+            sprite.play(`${charType}_idle`, true);
         }
     }
 }
